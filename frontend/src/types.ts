@@ -36,6 +36,8 @@ export type NewsEvent = {
 };
 
 export type Impact = "HIGH" | "MEDIUM" | "LOW" | "HOLIDAY";
+export type NewsWindow = "24H" | "48H" | "THIS_WEEK";
+export type CurrencyCode = "USD" | "EUR" | "GBP" | "JPY" | "AUD" | "CAD" | "CHF" | "NZD";
 
 export type ApiEconomicEvent = {
   id: number | string;
@@ -57,4 +59,5 @@ export type UserSettings = {
   utc_offset: number;
   impacts: Impact[];
   currencies: string[];
+  news_window: NewsWindow;
 };

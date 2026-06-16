@@ -25,7 +25,8 @@ def list_events(
     db: Session = Depends(get_db),
 ):
     impacts = [item.strip().upper() for item in impact.split(",") if item.strip()] if impact else None
-    events = get_events(db, from_, to, impacts, currency, limit)
+    currencies = [item.strip().upper() for item in currency.split(",") if item.strip()] if currency else None
+    events = get_events(db, from_, to, impacts, currencies, limit)
     return {"events": events}
 
 

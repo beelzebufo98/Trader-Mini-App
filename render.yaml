@@ -18,6 +18,8 @@ services:
         value: 3.12.8
       - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: TELEGRAM_WEBAPP_URL
+        value: https://trader-mini-frontend.onrender.com
 
   - type: web
     name: trader-mini-frontend
@@ -35,7 +37,7 @@ services:
     rootDir: backend
     schedule: "0 */3 * * *"
     buildCommand: pip install -e . && python -m playwright install chromium
-    startCommand: python -m app.jobs.parse_forexfactory --browser --url https://www.forexfactory.com/calendar?week=this --impact HIGH --prune-source
+    startCommand: python -m app.jobs.parse_forexfactory --browser --url https://www.forexfactory.com/calendar?week=this --impact HIGH --impact MEDIUM --impact LOW --prune-source
     envVars:
       - key: DATABASE_URL
         fromDatabase:

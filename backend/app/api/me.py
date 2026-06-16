@@ -17,6 +17,7 @@ def serialize_settings(settings: UserSettings) -> UserSettingsRead:
         utc_offset=settings.utc_offset,
         impacts=[impact for impact in settings.impacts.split(",") if impact],
         currencies=[currency for currency in settings.currencies.split(",") if currency],
+        news_window=settings.news_window,
         created_at=settings.created_at,
         updated_at=settings.updated_at,
     )
@@ -60,6 +61,8 @@ def update_settings(
         settings.impacts = ",".join(payload.impacts)
     if payload.currencies is not None:
         settings.currencies = ",".join(payload.currencies)
+    if payload.news_window is not None:
+        settings.news_window = payload.news_window
 
     db.commit()
     db.refresh(settings)

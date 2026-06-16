@@ -44,3 +44,29 @@ export function getTodayAndTomorrowWindowUtc(date: Date, utcOffset: number) {
     to: new Date(start + 2 * DAY_MS - 1)
   };
 }
+
+export function getEventsWindowUtc(date: Date, utcOffset: number, window: "24H" | "48H" | "THIS_WEEK") {
+  if (window === "24H") {
+    return {
+      from: date,
+      to: new Date(date.getTime() + DAY_MS)
+    };
+  }
+
+  if (window === "48H") {
+    return {
+      from: date,
+      to: new Date(date.getTime() + 2 * DAY_MS)
+    };
+  }
+
+  const dayStart = localDayStartUtc(date, utcOffset);
+  const shifted = toOffsetDate(date, utcOffset);
+  const mondayOffset = (shifted.getUTCDay() + 6) % 7;
+  const weekStart = dayStart - mondayOffset * DAY_MS;
+
+  return {
+    from: new Date(weekStart),
+    to: new Date(weekStart + 7 * DAY_MS - 1)
+  };
+}

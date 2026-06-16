@@ -5,6 +5,7 @@ from pydantic import BaseModel, field_serializer, field_validator
 
 
 VALID_IMPACTS = {"HIGH", "MEDIUM", "LOW", "HOLIDAY"}
+VALID_NEWS_WINDOWS = {"24H", "48H", "THIS_WEEK"}
 
 
 class TelegramUser(BaseModel):
@@ -17,6 +18,7 @@ class UserSettingsUpdate(BaseModel):
     utc_offset: Optional[int] = None
     impacts: Optional[list[str]] = None
     currencies: Optional[list[str]] = None
+    news_window: Optional[str] = None
 
     @field_validator("utc_offset")
     @classmethod
@@ -45,6 +47,17 @@ class UserSettingsUpdate(BaseModel):
 
         return [currency.strip().upper() for currency in value if currency.strip()]
 
+    @field_validator("news_window")
+    @classmethod
+    def validate_news_window(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+
+        normalized = value.upper()
+        if normalized not in VALID_NEWS_WINDOWS:
+            raise ValueError("Unsupported news_window")
+        return normalized
+
 
 class UserSettingsRead(BaseModel):
     telegram_id: int
@@ -53,6 +66,7 @@ class UserSettingsRead(BaseModel):
     utc_offset: int
     impacts: list[str]
     currencies: list[str]
+    news_window: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

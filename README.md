@@ -46,6 +46,7 @@ Backend:
 DATABASE_URL=postgresql+psycopg://trader:trader@postgres:5432/trader_mini
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 TELEGRAM_BOT_TOKEN=<token from BotFather>
+TELEGRAM_WEBAPP_URL=http://localhost:5173
 ```
 
 Frontend build argument:
@@ -84,12 +85,34 @@ The Render cron job runs the parser every 3 hours:
 Parser command:
 
 ```bash
-python -m app.jobs.parse_forexfactory --browser --url https://www.forexfactory.com/calendar?week=this --impact HIGH --prune-source
+python -m app.jobs.parse_forexfactory --browser --url https://www.forexfactory.com/calendar?week=this --impact HIGH --impact MEDIUM --impact LOW --prune-source
 ```
 
 Telegram settings endpoints use Telegram Mini App `initData` validation. Set
 `TELEGRAM_BOT_TOKEN` on the backend service in Render; without it, public events
 still work, but `/api/v1/me/settings` is disabled.
+
+The Mini App settings screen stores:
+
+```text
+UTC offset
+impact filters
+currency filters
+news window: 24h / 48h / week
+```
+
+To make `/start` send an "Open Trader App" button, set these backend env vars:
+
+```text
+TELEGRAM_BOT_TOKEN=<token from BotFather>
+TELEGRAM_WEBAPP_URL=https://trader-mini-frontend.onrender.com
+```
+
+Then register the webhook once:
+
+```text
+https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://trader-mini-backend.onrender.com/api/v1/telegram/webhook
+```
 
 Production examples:
 

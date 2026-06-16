@@ -12,7 +12,7 @@ def get_events(
     from_: Optional[datetime] = None,
     to: Optional[datetime] = None,
     impact: Optional[list[str]] = None,
-    currency: Optional[str] = None,
+    currency: Optional[list[str]] = None,
     limit: int = 20,
 ):
     query = db.query(EconomicEvent)
@@ -23,8 +23,8 @@ def get_events(
         query = query.filter(EconomicEvent.datetime_utc <= to)
     if impact:
         query = query.filter(EconomicEvent.impact.in_(impact))
-    if currency is not None:
-        query = query.filter(EconomicEvent.currency == currency)
+    if currency:
+        query = query.filter(EconomicEvent.currency.in_(currency))
 
     return query.order_by(EconomicEvent.datetime_utc.asc()).limit(limit).all()
 
