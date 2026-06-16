@@ -53,9 +53,23 @@ def fetch_calendar_html_with_browser(url: str = CALENDAR_URL) -> str:
         except PlaywrightTimeoutError:
             pass
 
+        scroll_to_page_bottom(page)
         html = page.content()
         browser.close()
         return html
+
+
+def scroll_to_page_bottom(page, *, max_scrolls: int = 40) -> None:
+    previous_height = 0
+
+    for _ in range(max_scrolls):
+        height = page.evaluate("document.body.scrollHeight")
+        if height == previous_height:
+            break
+
+        previous_height = height
+        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        page.wait_for_timeout(300)
 
 
 def load_calendar_html(path: str | Path) -> str:
