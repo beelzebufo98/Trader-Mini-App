@@ -16,6 +16,8 @@ services:
         value: production
       - key: PYTHON_VERSION
         value: 3.12.8
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
 
   - type: web
     name: trader-mini-frontend

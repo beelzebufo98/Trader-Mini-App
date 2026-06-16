@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./backend.db"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     environment: str = "development"
+    telegram_bot_token: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

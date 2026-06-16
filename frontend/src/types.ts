@@ -31,19 +31,30 @@ export type NewsEvent = {
   id: string;
   title: string;
   currency: string;
-  impact: "HIGH";
+  impact: Impact;
   datetimeUtc: string;
 };
+
+export type Impact = "HIGH" | "MEDIUM" | "LOW" | "HOLIDAY";
 
 export type ApiEconomicEvent = {
   id: number | string;
   title: string;
   currency: string;
-  impact: "HIGH" | "MEDIUM" | "LOW" | "HOLIDAY";
+  impact: Impact;
   datetime_utc: string;
   is_all_day: boolean;
 };
 
 export type ApiEventsResponse = {
   events: ApiEconomicEvent[];
+};
+
+export type UserSettings = {
+  telegram_id: number;
+  username?: string | null;
+  first_name?: string | null;
+  utc_offset: number;
+  impacts: Impact[];
+  currencies: string[];
 };

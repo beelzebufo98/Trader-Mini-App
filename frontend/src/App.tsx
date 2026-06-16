@@ -1,18 +1,22 @@
 import { Bell, ChevronDown, Newspaper, Settings } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { fetchHighImpactEvents } from "./api";
+import { fetchHighImpactEvents, fetchUserSettings, saveUserSettings } from "./api";
 import { getMarketState } from "./marketState";
 import { mockEvents } from "./mockEvents";
 import { buildTimelineSessions, buildTimeTicks, TIMELINE_HOURS, PX_PER_HOUR } from "./sessions";
 import { formatEventDate, formatTopTime, formatUtcLabel } from "./time";
 import { timezoneOptions } from "./timezones";
-import type { NewsEvent } from "./types";
+import type { Impact, NewsEvent } from "./types";
+
+const impactOptions: Impact[] = ["HIGH", "MEDIUM"];
 
 export function App() {
   const [now, setNow] = useState(() => new Date());
   const [utcOffset, setUtcOffset] = useState(3);
+  const [selectedImpacts, setSelectedImpacts] = useState<Impact[]>(["HIGH"]);
   const [events, setEvents] = useState<NewsEvent[]>(mockEvents);
   const [eventsStatus, setEventsStatus] = useState<"loading" | "ready" | "fallback" | "empty">("loading");
+  const [settingsStatus, setSettingsStatus] = useState<"local" | "loading" | "synced" | "unavailable">("local");
   const [isTimezoneOpen, setTimezoneOpen] = useState(false);
   const [isNewsOpen, setNewsOpen] = useState(() => new URLSearchParams(window.location.search).get("news") === "1");
   const [isSettingsHintOpen, setSettingsHintOpen] = useState(false);
@@ -30,11 +34,37 @@ export function App() {
   useEffect(() => {
     const controller = new AbortController();
 
+    async function loadSettings() {
+      setSettingsStatus("loading");
+
+      try {
+        const settings = await fetchUserSettings(controller.signal);
+        if (!settings) {
+          setSettingsStatus("local");
+          return;
+        }
+
+        setUtcOffset(settings.utc_offset);
+        setSelectedImpacts(settings.impacts.length > 0 ? settings.impacts : ["HIGH"]);
+        setSettingsStatus("synced");
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setSettingsStatus("unavailable");
+      }
+    }
+
+    loadSettings();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
     async function loadEvents() {
       setEventsStatus("loading");
 
       try {
-        const loadedEvents = await fetchHighImpactEvents(new Date(), utcOffset, controller.signal);
+        const loadedEvents = await fetchHighImpactEvents(new Date(), utcOffset, selectedImpacts, controller.signal);
         setEvents(loadedEvents.length > 0 ? loadedEvents : []);
         setEventsStatus(loadedEvents.length > 0 ? "ready" : "empty");
       } catch (error) {
@@ -48,7 +78,25 @@ export function App() {
     loadEvents();
 
     return () => controller.abort();
-  }, [utcOffset]);
+  }, [utcOffset, selectedImpacts]);
+
+  async function updatePreferences(next: { utcOffset?: number; impacts?: Impact[] }) {
+    const nextUtcOffset = next.utcOffset ?? utcOffset;
+    const nextImpacts = next.impacts ?? selectedImpacts;
+
+    setUtcOffset(nextUtcOffset);
+    setSelectedImpacts(nextImpacts);
+
+    try {
+      const saved = await saveUserSettings({
+        utc_offset: nextUtcOffset,
+        impacts: nextImpacts
+      });
+      if (saved) setSettingsStatus("synced");
+    } catch (error) {
+      setSettingsStatus("unavailable");
+    }
+  }
 
   const marketState = useMemo(() => getMarketState(now, utcOffset), [now, utcOffset]);
   const timelineSessions = useMemo(() => buildTimelineSessions(now), [now]);
@@ -67,7 +115,34 @@ export function App() {
         </button>
       </header>
 
-      {isSettingsHintOpen && <div className="settings-hint">Settings will be available in the next version</div>}
+      {isSettingsHintOpen && (
+        <div className="settings-panel">
+          <div className="settings-panel-row">
+            <span>Impact</span>
+            <div className="segmented-control">
+              {impactOptions.map((impact) => {
+                const isActive = selectedImpacts.includes(impact);
+                return (
+                  <button
+                    className={isActive ? "segment active" : "segment"}
+                    key={impact}
+                    type="button"
+                    onClick={() => {
+                      const nextImpacts = isActive
+                        ? selectedImpacts.filter((item) => item !== impact)
+                        : [...selectedImpacts, impact];
+                      updatePreferences({ impacts: nextImpacts.length > 0 ? nextImpacts : ["HIGH"] });
+                    }}
+                  >
+                    {impact}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className={`settings-sync ${settingsStatus}`}>{settingsStatus === "synced" ? "Saved" : "Local"}</div>
+        </div>
+      )}
 
       <section className="time-panel" aria-label="Current time">
         <div className="time-readout">{formatTopTime(now, utcOffset)}</div>
@@ -85,7 +160,7 @@ export function App() {
                   key={option.offset}
                   type="button"
                   onClick={() => {
-                    setUtcOffset(option.offset);
+                    updatePreferences({ utcOffset: option.offset });
                     setTimezoneOpen(false);
                   }}
                 >
@@ -141,7 +216,7 @@ export function App() {
               {eventsStatus === "loading" && "Loading events..."}
               {eventsStatus === "ready" && "Events updated"}
               {eventsStatus === "fallback" && "Showing sample events"}
-              {eventsStatus === "empty" && "No high impact events in the selected window"}
+              {eventsStatus === "empty" && "No selected events in the selected window"}
             </div>
 
             <div className="news-list">
@@ -149,7 +224,7 @@ export function App() {
                 <article className="news-card" key={event.id}>
                   <div>
                     <h2>{event.title}</h2>
-                    <p>{event.currency}</p>
+                    <p>{event.currency} · {event.impact}</p>
                   </div>
                   <time>{formatEventDate(event.datetimeUtc, utcOffset)}</time>
                 </article>

@@ -25,7 +25,7 @@ http://localhost:8000/health/
 Events API:
 
 ```text
-http://localhost:8000/api/v1/events/?impact=HIGH&limit=20
+http://localhost:8000/api/v1/events/?impact=HIGH,MEDIUM&limit=20
 ```
 
 ## Parser Job
@@ -45,6 +45,7 @@ Backend:
 ```text
 DATABASE_URL=postgresql+psycopg://trader:trader@postgres:5432/trader_mini
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+TELEGRAM_BOT_TOKEN=<token from BotFather>
 ```
 
 Frontend build argument:
@@ -83,8 +84,12 @@ The Render cron job runs the parser every 3 hours:
 Parser command:
 
 ```bash
-python -m app.jobs.parse_forexfactory --browser --impact HIGH
+python -m app.jobs.parse_forexfactory --browser --url https://www.forexfactory.com/calendar?week=this --impact HIGH --prune-source
 ```
+
+Telegram settings endpoints use Telegram Mini App `initData` validation. Set
+`TELEGRAM_BOT_TOKEN` on the backend service in Render; without it, public events
+still work, but `/api/v1/me/settings` is disabled.
 
 Production examples:
 

@@ -11,7 +11,7 @@ def get_events(
     db: Session,
     from_: Optional[datetime] = None,
     to: Optional[datetime] = None,
-    impact: Optional[str] = None,
+    impact: Optional[list[str]] = None,
     currency: Optional[str] = None,
     limit: int = 20,
 ):
@@ -21,8 +21,8 @@ def get_events(
         query = query.filter(EconomicEvent.datetime_utc >= from_)
     if to is not None:
         query = query.filter(EconomicEvent.datetime_utc <= to)
-    if impact is not None:
-        query = query.filter(EconomicEvent.impact == impact)
+    if impact:
+        query = query.filter(EconomicEvent.impact.in_(impact))
     if currency is not None:
         query = query.filter(EconomicEvent.currency == currency)
 
