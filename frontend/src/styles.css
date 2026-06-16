@@ -275,30 +275,6 @@ button {
   transform: translateX(-50%);
 }
 
-.default-logic-copy {
-  position: absolute;
-  top: 42%;
-  left: 50%;
-  z-index: 6;
-  display: grid;
-  gap: 5px;
-  width: min(280px, calc(100vw - 56px));
-  color: rgba(245, 242, 233, 0.58);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.18;
-  text-align: center;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-.default-logic-copy small {
-  margin-top: 8px;
-  color: rgba(245, 242, 233, 0.4);
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .news-toggle {
   position: absolute;
   right: calc(50% - 54px);

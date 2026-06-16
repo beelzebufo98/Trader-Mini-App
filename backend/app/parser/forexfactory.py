@@ -1,4 +1,5 @@
-from datetime import date
+import json
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 
 import httpx
@@ -6,16 +7,20 @@ from bs4 import BeautifulSoup
 from bs4.element import Tag
 
 from app.parser.normalize import (
+    BASE_URL,
     ParsedEvent,
+    SOURCE,
     build_parsed_event,
     clean_text,
+    make_event_hash,
     parse_date,
     parse_impact,
     parse_time,
+    normalize_url,
 )
 
 
-CALENDAR_URL = "https://www.forexfactory.com/calendar"
+CALENDAR_URL = "https://www.forexfactory.com/calendar?week=this"
 DEFAULT_TIMEOUT_SECONDS = 30
 
 
@@ -69,6 +74,7 @@ def scroll_to_page_bottom(page, *, max_scrolls: int = 40) -> None:
 
         previous_height = height
         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+        page.mouse.wheel(0, 2500)
         page.wait_for_timeout(300)
 
 
@@ -87,6 +93,10 @@ def parse_calendar_html(
     include_impacts: set[str] | None = None,
     current_year: int | None = None,
 ) -> list[ParsedEvent]:
+    embedded_events = parse_embedded_calendar_events(html, include_impacts=include_impacts)
+    if embedded_events:
+        return embedded_events
+
     soup = BeautifulSoup(html, "html.parser")
     rows = soup.select("tr.calendar__row")
 
@@ -142,6 +152,108 @@ def parse_calendar_html(
         events.append(event)
 
     return events
+
+
+def parse_embedded_calendar_events(html: str, *, include_impacts: set[str] | None = None) -> list[ParsedEvent]:
+    days = extract_embedded_days(html)
+    if not days:
+        return []
+
+    events: list[ParsedEvent] = []
+    for day in days:
+        for item in day.get("events", []):
+            event = build_event_from_embedded_item(item)
+            if event is None:
+                continue
+
+            if include_impacts is not None and event.impact not in include_impacts:
+                continue
+
+            events.append(event)
+
+    return events
+
+
+def extract_embedded_days(html: str) -> list[dict]:
+    marker_index = html.find("days:")
+    if marker_index == -1:
+        return []
+
+    array_start = html.find("[", marker_index)
+    if array_start == -1:
+        return []
+
+    array_end = find_matching_json_array_end(html, array_start)
+    if array_end is None:
+        return []
+
+    try:
+        parsed = json.loads(html[array_start:array_end])
+    except json.JSONDecodeError:
+        return []
+
+    return parsed if isinstance(parsed, list) else []
+
+
+def find_matching_json_array_end(value: str, start: int) -> int | None:
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for index in range(start, len(value)):
+        char = value[index]
+
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+
+    return None
+
+
+def build_event_from_embedded_item(item: dict) -> ParsedEvent | None:
+    title = clean_text(item.get("name"))
+    currency = clean_text(item.get("currency")).upper()
+    impact = parse_impact(" ".join([clean_text(item.get("impactName")), clean_text(item.get("impactClass"))]))
+    dateline = item.get("dateline")
+
+    if not title or not currency or not impact or not isinstance(dateline, int):
+        return None
+
+    datetime_utc = datetime.fromtimestamp(dateline, tz=timezone.utc).replace(tzinfo=None)
+    time_label = clean_text(item.get("timeLabel"))
+    is_all_day = "day" in time_label.lower() and not parse_time(time_label)[0]
+    event_time = None if is_all_day else datetime_utc.strftime("%H:%M")
+
+    return ParsedEvent(
+        source=SOURCE,
+        source_event_id=f"ff_{item.get('id')}" if item.get("id") is not None else None,
+        title=title,
+        currency=currency,
+        impact=impact,
+        datetime_utc=datetime_utc,
+        event_date=datetime.combine(datetime_utc.date(), time(0, 0)),
+        event_time=event_time,
+        is_all_day=is_all_day,
+        event_url=normalize_url(item.get("url") or item.get("soloUrl") or BASE_URL),
+        actual=clean_text(item.get("actual")) or None,
+        forecast=clean_text(item.get("forecast")) or None,
+        previous=clean_text(item.get("previous")) or None,
+        event_hash=make_event_hash(title, currency, datetime_utc),
+    )
 
 
 def extract_date(row: Tag, current_year: int) -> date | None:

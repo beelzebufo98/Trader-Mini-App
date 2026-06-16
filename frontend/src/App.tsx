@@ -126,12 +126,6 @@ export function App() {
         <div className="now-line" />
         <div className="now-arrow" />
 
-        <div className="default-logic-copy">
-          <span>Trading filters are not configured</span>
-          <span>using default market logic</span>
-          <small>Set up your trading strategy in Settings</small>
-        </div>
-
         <button className="news-toggle" type="button" onClick={() => setNewsOpen((value) => !value)}>
           <Newspaper size={22} />
         </button>
@@ -145,9 +139,9 @@ export function App() {
 
             <div className={`news-status ${eventsStatus}`}>
               {eventsStatus === "loading" && "Loading events..."}
-              {eventsStatus === "ready" && "Loaded from backend"}
-              {eventsStatus === "fallback" && "Backend unavailable, showing mock data"}
-              {eventsStatus === "empty" && "No high impact events for today or tomorrow"}
+              {eventsStatus === "ready" && "Events updated"}
+              {eventsStatus === "fallback" && "Showing sample events"}
+              {eventsStatus === "empty" && "No high impact events in the selected window"}
             </div>
 
             <div className="news-list">
