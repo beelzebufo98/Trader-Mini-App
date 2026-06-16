@@ -89,7 +89,7 @@ def fetch_with_browser_or_exit() -> str:
         if "Executable doesn't exist" in message or "playwright install" in message:
             raise SystemExit(
                 "Playwright Chromium is not installed. Run:\n"
-                ".\\.venv\\Scripts\\python.exe -m playwright install chromium\n"
+                "python -m playwright install chromium\n"
                 "Then retry the parser command."
             ) from exc
 

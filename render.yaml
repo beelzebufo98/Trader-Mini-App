@@ -43,6 +43,8 @@ services:
         value: production
       - key: PYTHON_VERSION
         value: 3.12.8
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: "0"
 
 databases:
   - name: trader-mini-db
