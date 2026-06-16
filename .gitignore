@@ -1,0 +1,47 @@
+# Environment files with real local/production values.
+.env
+.env.local
+.env.production
+**/.env
+**/.env.local
+**/.env.production
+!.env.example
+!**/.env.example
+!**/.env.production.example
+
+# Python runtime/build artifacts.
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/htmlcov/
+**/.venv/
+**/venv/
+**/*.egg-info/
+**/build/
+**/dist/
+
+# Local databases and parser debug snapshots.
+**/*.db
+**/*.db-journal
+**/*.sqlite
+**/*.sqlite3
+**/forexfactory_calendar.html
+**/playwright-report/
+**/test-results/
+
+# Node/Vite artifacts.
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# OS/editor noise.
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

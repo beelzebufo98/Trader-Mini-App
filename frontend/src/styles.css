@@ -1,0 +1,427 @@
+:root {
+  color: #f5f2e9;
+  background: #101113;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02), transparent 22%, transparent 78%, rgba(255, 255, 255, 0.02)),
+    #070809;
+}
+
+button {
+  color: inherit;
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  max-width: 430px;
+  margin: 0 auto;
+  overflow: hidden;
+  padding: max(35px, env(safe-area-inset-top)) 14px 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 18%),
+    radial-gradient(circle at 20% 10%, rgba(39, 174, 96, 0.08), transparent 24%),
+    #101113;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  gap: 10px;
+}
+
+.market-state {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.market-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.market-dot.green {
+  background: #27ae60;
+  box-shadow: 0 0 14px rgba(39, 174, 96, 0.75);
+}
+
+.market-dot.red {
+  background: #eb5757;
+  box-shadow: 0 0 14px rgba(235, 87, 87, 0.7);
+}
+
+.market-dot.gray {
+  background: #a6a6a6;
+  box-shadow: 0 0 14px rgba(166, 166, 166, 0.42);
+}
+
+.icon-button,
+.timezone-trigger,
+.news-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.07);
+  cursor: pointer;
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+}
+
+.settings-hint {
+  margin: 8px 0 0 auto;
+  width: fit-content;
+  max-width: 260px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: rgba(22, 23, 26, 0.92);
+  color: rgba(245, 242, 233, 0.78);
+  font-size: 12px;
+}
+
+.time-panel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.time-readout {
+  width: 100%;
+  min-width: 0;
+  font-size: clamp(16px, 4vw, 22px);
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.timezone-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.timezone-trigger {
+  gap: 4px;
+  min-height: 34px;
+  border-radius: 8px;
+  padding: 0 9px;
+  font-size: 13px;
+}
+
+.timezone-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+  width: min(290px, calc(100vw - 28px));
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(22, 23, 26, 0.98);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.timezone-option {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: transparent;
+  padding: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.timezone-option.active {
+  background: rgba(39, 174, 96, 0.18);
+}
+
+.timeline {
+  position: relative;
+  height: calc(100vh - 138px);
+  min-height: 560px;
+  max-height: 760px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.timeline-stage {
+  position: absolute;
+  inset: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.session-band {
+  position: absolute;
+  top: 18px;
+  bottom: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 18px;
+  border-radius: 8px;
+  opacity: 0.82;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.session-band span,
+.session-band small {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.38);
+}
+
+.session-band span {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.session-band small {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.now-line {
+  position: absolute;
+  top: 0;
+  bottom: 40px;
+  left: 50%;
+  z-index: 4;
+  border-left: 2px dashed rgba(245, 242, 233, 0.78);
+  transform: translateX(-1px);
+}
+
+.now-arrow {
+  position: absolute;
+  bottom: 42px;
+  left: 50%;
+  z-index: 5;
+  width: 0;
+  height: 0;
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-bottom: 18px solid #a8a8a8;
+  transform: translateX(-50%);
+}
+
+.time-tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 58px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.time-tick span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.time-tick small {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  color: rgba(245, 242, 233, 0.58);
+  font-size: 11px;
+  transform: translateX(-50%);
+}
+
+.default-logic-copy {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  z-index: 6;
+  display: grid;
+  gap: 5px;
+  width: min(280px, calc(100vw - 56px));
+  color: rgba(245, 242, 233, 0.58);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.18;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.default-logic-copy small {
+  margin-top: 8px;
+  color: rgba(245, 242, 233, 0.4);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.news-toggle {
+  position: absolute;
+  right: calc(50% - 54px);
+  bottom: 66px;
+  z-index: 8;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: rgba(22, 23, 26, 0.9);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28);
+}
+
+.news-drawer {
+  position: absolute;
+  right: 0;
+  bottom: 118px;
+  z-index: 10;
+  width: min(330px, calc(100vw - 28px));
+  max-height: min(390px, 54vh);
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(22, 23, 26, 0.96);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.42);
+}
+
+.news-header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(22, 23, 26, 0.98);
+  color: rgba(245, 242, 233, 0.82);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.news-status {
+  margin: 0 10px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: rgba(245, 242, 233, 0.68);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.news-status.ready {
+  border-color: rgba(39, 174, 96, 0.28);
+  color: rgba(190, 234, 207, 0.82);
+}
+
+.news-status.fallback {
+  border-color: rgba(242, 201, 76, 0.28);
+  color: rgba(242, 201, 76, 0.86);
+}
+
+.news-status.empty {
+  color: rgba(245, 242, 233, 0.52);
+}
+
+.news-list {
+  display: grid;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.news-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.news-card h2 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.news-card p {
+  margin: 6px 0 0;
+  color: #f2c94c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.news-card time {
+  flex: 0 0 auto;
+  color: rgba(245, 242, 233, 0.62);
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: right;
+}
+
+@media (max-width: 380px) {
+  .app-shell {
+    padding-inline: 10px;
+  }
+
+  .time-panel {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .timezone-wrap {
+    align-self: flex-end;
+  }
+
+  .timeline {
+    height: calc(100vh - 176px);
+  }
+}
+
+@media (min-width: 431px) {
+  .app-shell {
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 24px 80px rgba(0, 0, 0, 0.45);
+  }
+}

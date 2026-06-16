@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: trader-mini-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -e .
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: trader-mini-db
+          property: connectionString
+      - key: CORS_ORIGINS
+        value: https://trader-mini-frontend.onrender.com
+      - key: ENVIRONMENT
+        value: production
+
+  - type: web
+    name: trader-mini-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://trader-mini-backend.onrender.com
+
+  - type: cron
+    name: trader-mini-parser
+    runtime: python
+    rootDir: backend
+    schedule: "0 */3 * * *"
+    buildCommand: pip install -e . && python -m playwright install chromium
+    startCommand: python -m app.jobs.parse_forexfactory --browser --impact HIGH
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: trader-mini-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+
+databases:
+  - name: trader-mini-db
+    databaseName: trader_mini
+    user: trader_mini
