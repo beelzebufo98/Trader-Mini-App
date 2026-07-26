@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import BigInteger, Column, DateTime, Integer, String
 
 from app.database import Base
 
@@ -9,7 +9,7 @@ class UserSettings(Base):
     __tablename__ = "user_settings"
 
     id = Column(Integer, primary_key=True, index=True)
-    telegram_id = Column(Integer, unique=True, nullable=False, index=True)
+    telegram_id = Column(BigInteger, unique=True, nullable=False, index=True)
     username = Column(String(128), nullable=True)
     first_name = Column(String(128), nullable=True)
     utc_offset = Column(Integer, nullable=False, default=3)

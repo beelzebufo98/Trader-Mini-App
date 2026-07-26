@@ -34,9 +34,16 @@ def ensure_user_settings_columns() -> None:
     if "user_settings" not in inspector.get_table_names():
         return
 
-    columns = {column["name"] for column in inspector.get_columns("user_settings")}
+    columns_by_name = {column["name"]: column for column in inspector.get_columns("user_settings")}
+    columns = set(columns_by_name)
 
     with engine.begin() as connection:
+        telegram_id_column = columns_by_name.get("telegram_id")
+        if telegram_id_column is not None and engine.dialect.name == "postgresql":
+            column_type = str(telegram_id_column["type"]).upper()
+            if "BIGINT" not in column_type:
+                connection.execute(text("ALTER TABLE user_settings ALTER COLUMN telegram_id TYPE BIGINT"))
+
         if "news_window" not in columns:
             connection.execute(text("ALTER TABLE user_settings ADD COLUMN news_window VARCHAR(32) DEFAULT '48H' NOT NULL"))
         if "language" not in columns:
