@@ -31,25 +31,6 @@ services:
       - key: VITE_API_BASE_URL
         value: https://trader-mini-backend.onrender.com
 
-  - type: cron
-    name: trader-mini-parser
-    runtime: python
-    rootDir: backend
-    schedule: "0 */3 * * *"
-    buildCommand: pip install -e . && python -m playwright install chromium
-    startCommand: python -m app.jobs.parse_forexfactory --browser --url https://www.forexfactory.com/calendar?week=this --impact HIGH --impact MEDIUM --impact LOW --prune-source
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: trader-mini-db
-          property: connectionString
-      - key: ENVIRONMENT
-        value: production
-      - key: PYTHON_VERSION
-        value: 3.12.8
-      - key: PLAYWRIGHT_BROWSERS_PATH
-        value: "0"
-
 databases:
   - name: trader-mini-db
     databaseName: trader_mini

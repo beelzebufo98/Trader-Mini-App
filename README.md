@@ -1,6 +1,10 @@
-# Trader Mini App
+# Paradox FX Mini App
 
-MVP Telegram Mini App for market sessions, market state, and ForexFactory economic events.
+MVP Telegram Mini App interface for Paradox FX. The first stage includes only
+the Mini App flow and UI: format selection in Telegram, market selection,
+language selection, and a placeholder signal workspace. Broker connections,
+trading servers, parsers, and real signal generation are out of scope for this
+stage.
 
 ## Local Docker Run
 
@@ -21,22 +25,6 @@ Health check:
 ```text
 http://localhost:8000/health/
 ```
-
-Events API:
-
-```text
-http://localhost:8000/api/v1/events/?impact=HIGH,MEDIUM&limit=20
-```
-
-## Parser Job
-
-Run the parser against the Docker PostgreSQL database:
-
-```bash
-docker compose --profile jobs run --rm parser
-```
-
-The parser uses Playwright Chromium inside the backend image.
 
 ## Environment
 
@@ -65,7 +53,6 @@ The repository includes `render.yaml` for Render Blueprint deploy:
 Postgres: trader-mini-db
 Backend:  trader-mini-backend
 Frontend: trader-mini-frontend
-Cron:     trader-mini-parser
 ```
 
 After deployment, verify the generated Render domains. If Render changes service
@@ -76,32 +63,19 @@ Backend CORS_ORIGINS
 Frontend VITE_API_BASE_URL
 ```
 
-The Render cron job runs the parser every 3 hours:
-
-```text
-0 */3 * * *
-```
-
-Parser command:
-
-```bash
-python -m app.jobs.parse_forexfactory --browser --url https://www.forexfactory.com/calendar?week=this --impact HIGH --impact MEDIUM --impact LOW --prune-source
-```
-
 Telegram settings endpoints use Telegram Mini App `initData` validation. Set
-`TELEGRAM_BOT_TOKEN` on the backend service in Render; without it, public events
-still work, but `/api/v1/me/settings` is disabled.
+`TELEGRAM_BOT_TOKEN` on the backend service in Render; without it,
+`/api/v1/me/settings` is disabled.
 
-The Mini App settings screen stores:
+The Mini App stores:
 
 ```text
-UTC offset
-impact filters
-currency filters
-news window: 24h / 48h / week
+market: FOREX / OTC
+language: ru / en / es / pt / tr / ar
 ```
 
-To make `/start` send an "Open Trader App" button, set these backend env vars:
+To make `/start` send format buttons, including the Mini App button, set these
+backend env vars:
 
 ```text
 TELEGRAM_BOT_TOKEN=<token from BotFather>

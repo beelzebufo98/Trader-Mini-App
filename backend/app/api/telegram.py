@@ -23,9 +23,16 @@ def telegram_webhook(update: dict[str, Any]):
 
     payload = {
         "chat_id": chat_id,
-        "text": "Open Trader Mini App",
+        "text": (
+            "Привет! 👋\n\n"
+            "Профессиональные торговые сигналы для бинарных опционов и форекс рынка.\n\n"
+            "Выберите формат работы:"
+        ),
         "reply_markup": {
-            "inline_keyboard": [[{"text": "Open Trader App", "web_app": {"url": settings.telegram_webapp_url}}]]
+            "inline_keyboard": [
+                [{"text": "⚡ Мини-апп (рекомендуется)", "web_app": {"url": settings.telegram_webapp_url}}],
+                [{"text": "💬 Текстовый формат", "callback_data": "text_format"}],
+            ]
         },
     }
 

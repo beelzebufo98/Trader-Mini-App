@@ -6,6 +6,8 @@ from pydantic import BaseModel, field_serializer, field_validator
 
 VALID_IMPACTS = {"HIGH", "MEDIUM", "LOW", "HOLIDAY"}
 VALID_NEWS_WINDOWS = {"24H", "48H", "THIS_WEEK"}
+VALID_LANGUAGES = {"auto", "en", "ru", "es", "pt", "tr", "ar"}
+VALID_MARKETS = {"FOREX", "OTC"}
 
 
 class TelegramUser(BaseModel):
@@ -19,6 +21,8 @@ class UserSettingsUpdate(BaseModel):
     impacts: Optional[list[str]] = None
     currencies: Optional[list[str]] = None
     news_window: Optional[str] = None
+    language: Optional[str] = None
+    market: Optional[str] = None
 
     @field_validator("utc_offset")
     @classmethod
@@ -58,6 +62,28 @@ class UserSettingsUpdate(BaseModel):
             raise ValueError("Unsupported news_window")
         return normalized
 
+    @field_validator("language")
+    @classmethod
+    def validate_language(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+
+        normalized = value.strip().lower()
+        if normalized not in VALID_LANGUAGES:
+            raise ValueError("Unsupported language")
+        return normalized
+
+    @field_validator("market")
+    @classmethod
+    def validate_market(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+
+        normalized = value.strip().upper()
+        if normalized not in VALID_MARKETS:
+            raise ValueError("Unsupported market")
+        return normalized
+
 
 class UserSettingsRead(BaseModel):
     telegram_id: int
@@ -67,6 +93,8 @@ class UserSettingsRead(BaseModel):
     impacts: list[str]
     currencies: list[str]
     news_window: str
+    language: str
+    market: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

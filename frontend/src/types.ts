@@ -1,56 +1,8 @@
-export type MarketState = {
-  label: string;
-  tone: "green" | "red" | "gray";
-};
-
-export type TradingSession = {
-  name: string;
-  startMinuteUtcPlus3: number;
-  endMinuteUtcPlus3: number;
-  color: string;
-};
-
-export type TimelineSession = TradingSession & {
-  key: string;
-  left: number;
-  width: number;
-};
-
-export type TimeTick = {
-  key: number;
-  left: number;
-  label: string;
-};
-
-export type TimezoneOption = {
-  offset: number;
-  label: string;
-};
-
-export type NewsEvent = {
-  id: string;
-  title: string;
-  currency: string;
-  impact: Impact;
-  datetimeUtc: string;
-};
-
 export type Impact = "HIGH" | "MEDIUM" | "LOW" | "HOLIDAY";
 export type NewsWindow = "24H" | "48H" | "THIS_WEEK";
 export type CurrencyCode = "USD" | "EUR" | "GBP" | "JPY" | "AUD" | "CAD" | "CHF" | "NZD";
-
-export type ApiEconomicEvent = {
-  id: number | string;
-  title: string;
-  currency: string;
-  impact: Impact;
-  datetime_utc: string;
-  is_all_day: boolean;
-};
-
-export type ApiEventsResponse = {
-  events: ApiEconomicEvent[];
-};
+export type AppLanguage = "auto" | "en" | "ru" | "es" | "pt" | "tr" | "ar";
+export type MarketType = "FOREX" | "OTC";
 
 export type UserSettings = {
   telegram_id: number;
@@ -60,4 +12,6 @@ export type UserSettings = {
   impacts: Impact[];
   currencies: string[];
   news_window: NewsWindow;
+  language: AppLanguage;
+  market: MarketType;
 };

@@ -7,6 +7,11 @@ interface Window {
       expand: () => void;
       colorScheme?: "light" | "dark";
       initData?: string;
+      initDataUnsafe?: {
+        user?: {
+          language_code?: string;
+        };
+      };
       setHeaderColor?: (color: string) => void;
       setBackgroundColor?: (color: string) => void;
     };

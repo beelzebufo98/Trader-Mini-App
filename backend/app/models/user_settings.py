@@ -16,5 +16,7 @@ class UserSettings(Base):
     impacts = Column(String(128), nullable=False, default="HIGH")
     currencies = Column(String(256), nullable=False, default="")
     news_window = Column(String(32), nullable=False, default="48H")
+    language = Column(String(16), nullable=False, default="auto")
+    market = Column(String(16), nullable=False, default="FOREX")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

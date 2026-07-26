@@ -18,6 +18,8 @@ def serialize_settings(settings: UserSettings) -> UserSettingsRead:
         impacts=[impact for impact in settings.impacts.split(",") if impact],
         currencies=[currency for currency in settings.currencies.split(",") if currency],
         news_window=settings.news_window,
+        language=settings.language,
+        market=settings.market,
         created_at=settings.created_at,
         updated_at=settings.updated_at,
     )
@@ -63,6 +65,10 @@ def update_settings(
         settings.currencies = ",".join(payload.currencies)
     if payload.news_window is not None:
         settings.news_window = payload.news_window
+    if payload.language is not None:
+        settings.language = payload.language
+    if payload.market is not None:
+        settings.market = payload.market
 
     db.commit()
     db.refresh(settings)
