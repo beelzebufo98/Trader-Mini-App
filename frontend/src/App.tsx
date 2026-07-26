@@ -6,6 +6,7 @@ import { resolveLanguage } from "./i18n";
 import type { AppLanguage, MarketType } from "./types";
 
 const languageOptions: AppLanguage[] = ["ru", "en", "es", "pt", "tr", "ar"];
+const languageOptionValues = new Set<string>(languageOptions);
 
 const localStorageKeys = {
   market: "paradox_fx_market",
@@ -18,7 +19,15 @@ function readLocalMarket(): MarketType {
 
 function readLocalLanguage(): AppLanguage {
   const value = localStorage.getItem(localStorageKeys.language) as AppLanguage | null;
-  return value && ["ru", "en", "es", "pt", "tr", "ar"].includes(value) ? value : "ru";
+  return normalizeLanguage(value);
+}
+
+function normalizeLanguage(value: unknown): AppLanguage {
+  return typeof value === "string" && languageOptionValues.has(value) ? (value as AppLanguage) : "ru";
+}
+
+function normalizeMarket(value: unknown): MarketType {
+  return value === "OTC" ? "OTC" : "FOREX";
 }
 
 export function App() {
@@ -44,8 +53,8 @@ export function App() {
         const settings = await fetchUserSettings(controller.signal);
         if (!settings) return;
 
-        setMarket(settings.market);
-        setLanguage(settings.language === "auto" ? resolveLanguage("auto") : settings.language);
+        setMarket(normalizeMarket(settings.market));
+        setLanguage(normalizeLanguage(settings.language === "auto" ? resolveLanguage("auto") : settings.language));
         setSettingsStatus("synced");
       } catch (error) {
         if (!controller.signal.aborted) setSettingsStatus("unavailable");
@@ -93,10 +102,13 @@ export function App() {
   }
 
   function handleLanguageChange(nextLanguage: AppLanguage) {
-    setLanguage(nextLanguage);
+    const normalizedLanguage = normalizeLanguage(nextLanguage);
+    setLanguage(normalizedLanguage);
     setLanguageOpen(false);
-    persistSelection(market, nextLanguage);
+    persistSelection(market, normalizedLanguage);
   }
+
+  const languageLabel = t(`languages.${normalizeLanguage(language)}`);
 
   if (screen === "dashboard") {
     return (
@@ -202,26 +214,26 @@ export function App() {
                 onClick={() => setLanguageOpen((value) => !value)}
                 aria-expanded={isLanguageOpen}
               >
-                <span>{t(`languages.${language}`)}</span>
+                <span>{languageLabel}</span>
                 <ChevronDown size={16} />
               </button>
-
-              {isLanguageOpen && (
-                <div className="language-menu">
-                {languageOptions.map((option) => (
-                  <button
-                    className={option === language ? "language-option active" : "language-option"}
-                    key={option}
-                    type="button"
-                    onClick={() => handleLanguageChange(option)}
-                  >
-                    {t(`languages.${option}`)}
-                  </button>
-                ))}
-                </div>
-              )}
             </div>
           </div>
+
+          {isLanguageOpen && (
+            <div className="language-menu">
+              {languageOptions.map((option) => (
+                <button
+                  className={option === normalizeLanguage(language) ? "language-option active" : "language-option"}
+                  key={option}
+                  type="button"
+                  onClick={() => handleLanguageChange(option)}
+                >
+                  {t(`languages.${option}`)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <button className="continue-button" type="button" onClick={handleContinue}>
