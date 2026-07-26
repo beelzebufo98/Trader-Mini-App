@@ -117,6 +117,7 @@ def telegram_webhook(update: dict[str, Any]):
     user = message.get("from") or {}
     chat_id = chat.get("id")
     language = normalize_language(user.get("language_code"))
+    print(f"telegram_start language_code={user.get('language_code')} normalized_language={language}")
 
     if text != "/start" or chat_id is None:
         return {"ok": True}
@@ -143,6 +144,7 @@ def handle_callback_query(callback_query: dict[str, Any]) -> None:
     chat_id = chat.get("id")
     language = normalize_language(user.get("language_code"))
     text = BOT_TEXTS[language]
+    print(f"telegram_callback data={data} language_code={user.get('language_code')} normalized_language={language}")
 
     with httpx.Client(timeout=10) as client:
         if callback_id:

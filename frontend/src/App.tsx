@@ -31,15 +31,22 @@ const localStorageKeys = {
   market: "paradox_fx_market",
   language: "paradox_fx_language",
   languageManual: "paradox_fx_language_manual",
+  languageVersion: "paradox_fx_language_version",
   favoritePairs: "paradox_fx_favorite_pairs"
 };
+
+const languagePreferenceVersion = "2";
 
 function readLocalMarket(): MarketType {
   return localStorage.getItem(localStorageKeys.market) === "OTC" ? "OTC" : "FOREX";
 }
 
 function readLocalLanguage(): AppLanguage {
-  if (localStorage.getItem(localStorageKeys.languageManual) !== "1") {
+  const hasCurrentManualPreference =
+    localStorage.getItem(localStorageKeys.languageManual) === "1" &&
+    localStorage.getItem(localStorageKeys.languageVersion) === languagePreferenceVersion;
+
+  if (!hasCurrentManualPreference) {
     return detectAppLanguage();
   }
 
@@ -96,7 +103,11 @@ export function App() {
         if (!settings) return;
 
         setMarket(normalizeMarket(settings.market));
-        if (localStorage.getItem(localStorageKeys.languageManual) === "1") {
+        const hasCurrentManualPreference =
+          localStorage.getItem(localStorageKeys.languageManual) === "1" &&
+          localStorage.getItem(localStorageKeys.languageVersion) === languagePreferenceVersion;
+
+        if (hasCurrentManualPreference) {
           setLanguage(normalizeLanguage(settings.language === "auto" ? resolveLanguage("auto") : settings.language));
         } else {
           setLanguage(detectAppLanguage());
@@ -160,6 +171,7 @@ export function App() {
     setLanguage(normalizedLanguage);
     setLanguageOpen(false);
     localStorage.setItem(localStorageKeys.languageManual, "1");
+    localStorage.setItem(localStorageKeys.languageVersion, languagePreferenceVersion);
     persistSelection(market, normalizedLanguage);
   }
 
