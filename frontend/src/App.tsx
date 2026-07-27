@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchUserSettings, saveUserSettings } from "./api";
 import { detectAppLanguage, resolveLanguage } from "./i18n";
+import { TradingViewWidget } from "./TradingViewWidget";
 import type { AppLanguage, MarketType } from "./types";
 
 const languageOptions: AppLanguage[] = ["ru", "en", "es", "pt", "tr", "ar"];
@@ -55,14 +56,6 @@ const modelConfidenceFloor: Record<string, number> = {
   "RSI Model": 77,
   "MACD Model": 79
 };
-const analysisStages = [
-  "\u0410\u043d\u0430\u043b\u0438\u0437 \u0440\u044b\u043d\u043a\u0430",
-  "\u041f\u043e\u0438\u0441\u043a \u0441\u0435\u0442\u0430\u043f\u043e\u0432",
-  "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043c\u043e\u0434\u0435\u043b\u0438",
-  "\u0420\u0430\u0441\u0447\u0435\u0442 \u0432\u0435\u0440\u043e\u044f\u0442\u043d\u043e\u0441\u0442\u0438",
-  "\u0424\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0441\u0438\u0433\u043d\u0430\u043b\u0430"
-];
-
 type SignalResult = {
   confidence: number;
   direction: "CALL" | "PUT";
@@ -138,6 +131,22 @@ export function App() {
     window.Telegram?.WebApp?.setHeaderColor?.("#05070a");
     window.Telegram?.WebApp?.setBackgroundColor?.("#05070a");
   }, []);
+
+  useEffect(() => {
+    const backButton = window.Telegram?.WebApp?.BackButton;
+    if (!backButton) return;
+
+    if (screen === "dashboard") {
+      backButton.show();
+      backButton.onClick(handleBack);
+    } else {
+      backButton.hide();
+    }
+
+    return () => {
+      backButton.offClick(handleBack);
+    };
+  }, [screen, signalStatus]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -219,6 +228,19 @@ export function App() {
     setScreen("dashboard");
   }
 
+  function handleBack() {
+    setMarketOpen(false);
+    setPairOpen(false);
+    setModelOpen(false);
+    setExpirationOpen(false);
+
+    if (signalStatus === "ready" || signalStatus === "invalid") {
+      resetSignalResult();
+    }
+
+    setScreen("start");
+  }
+
   function handleMarketChange(nextMarket: MarketType) {
     setMarket(nextMarket);
     setTradingPair("");
@@ -249,17 +271,10 @@ export function App() {
     .filter((pair) => pair.toLowerCase().includes(pairSearch.trim().toLowerCase()))
     .sort((first, second) => Number(favoritePairs.has(second)) - Number(favoritePairs.has(first)));
   const selectedExpiration = expirationOptions.find((option) => option.value === expiration);
+  const analysisStages = t("signal.stages", { returnObjects: true }) as string[];
 
   function getExpirationLabel(minutes: string) {
-    const languageCode = resolveLanguage(language);
-    if (languageCode === "ru") {
-      if (minutes === "1") return "1 \u043c\u0438\u043d\u0443\u0442\u0430";
-      if (minutes === "3") return "3 \u043c\u0438\u043d\u0443\u0442\u044b";
-      if (minutes === "5") return "5 \u043c\u0438\u043d\u0443\u0442";
-      if (minutes === "15") return "15 \u043c\u0438\u043d\u0443\u0442";
-      if (minutes === "30") return "30 \u043c\u0438\u043d\u0443\u0442";
-    }
-    return `${minutes} min`;
+    return t(`signal.expirationMinutes.${minutes}`, { defaultValue: `${minutes} min` });
   }
 
   function markField(field: string) {
@@ -283,6 +298,18 @@ export function App() {
     setAnalysisProgress(0);
     setAnalysisStageIndex(0);
     setSignalResult(null);
+  }
+
+  function handleResetSignal() {
+    setTradingPair("");
+    setModel("");
+    setExpiration("");
+    setTouchedFields(new Set());
+    setPairSearch("");
+    setPairOpen(false);
+    setModelOpen(false);
+    setExpirationOpen(false);
+    resetSignalResult();
   }
 
   function handlePairSelect(nextPair: string) {
@@ -366,7 +393,7 @@ export function App() {
     return (
       <main className="paradox-shell">
         <section className="dashboard-card">
-          <button className="back-button" type="button" onClick={() => setScreen("start")}>
+          <button className="back-button" type="button" onClick={handleBack}>
             <ArrowLeft size={18} />
             <span>{t("dashboard.back")}</span>
           </button>
@@ -584,7 +611,7 @@ export function App() {
                 <strong>{analysisProgress}%</strong>
                 <small>{analysisStages[analysisStageIndex]}</small>
               </div>
-              <p>{"\u0410\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u0443\u0435\u043c \u0434\u0430\u043d\u043d\u044b\u0435 \u0440\u044b\u043d\u043a\u0430"}<br />{"\u0438 \u0438\u0449\u0435\u043c \u043b\u0443\u0447\u0448\u0438\u0435 \u0442\u043e\u0447\u043a\u0438 \u0432\u0445\u043e\u0434\u0430..."}</p>
+              <p>{t("signal.analysisLine1")}<br />{t("signal.analysisLine2")}</p>
               <div className="analysis-bars" aria-hidden="true">
                 {analysisStages.map((stage, index) => (
                   <span className={index <= analysisStageIndex ? "active" : ""} key={stage} />
@@ -594,39 +621,65 @@ export function App() {
           )}
 
           {signalStatus === "ready" && signalResult && (
+            <>
             <div className={signalResult.direction === "CALL" ? "result-panel call" : "result-panel put"}>
               <div className="result-heading">
                 <Check size={18} />
-                <strong>{"\u0421\u0438\u0433\u043d\u0430\u043b \u0433\u043e\u0442\u043e\u0432"}</strong>
+                <strong>{t("signal.ready")}</strong>
               </div>
-              <p>{tradingPair} · {selectedExpiration?.shortLabel} · {model}</p>
+              <div className="result-detail-grid">
+                <div>
+                  <span>{t("signal.pair")}</span>
+                  <strong>{tradingPair}</strong>
+                </div>
+                <div>
+                  <span>{t("signal.model")}</span>
+                  <strong>{model}</strong>
+                </div>
+                <div>
+                  <span>{t("signal.expiration")}</span>
+                  <strong>{selectedExpiration ? getExpirationLabel(selectedExpiration.value) : "-"}</strong>
+                </div>
+                <div>
+                  <span>{t("signal.time")}</span>
+                  <strong>{signalResult.createdAt}</strong>
+                </div>
+              </div>
 
               <div className="direction-card">
                 {signalResult.direction === "CALL" ? <ArrowUpRight size={58} /> : <TrendingDown size={58} />}
                 <span>
-                  <strong>{signalResult.direction === "CALL" ? "\u0412\u0432\u0435\u0440\u0445" : "\u0412\u043d\u0438\u0437"}</strong>
+                  <em>{t("signal.direction")}</em>
+                  <strong>{signalResult.direction === "CALL" ? t("signal.up") : t("signal.down")}</strong>
                   <small>{signalResult.direction}</small>
                 </span>
               </div>
 
               <div className="confidence-row">
-                <span>{"\u0423\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0441\u0442\u044c"}</span>
+                <span>{t("signal.confidence")}</span>
                 <strong>{signalResult.confidence}%</strong>
               </div>
               <div className="confidence-track">
                 <span style={{ width: `${signalResult.confidence}%` }} />
               </div>
 
-              <div className="result-time">
-                <Clock3 size={17} />
-                <span>{signalResult.createdAt}</span>
-              </div>
-
-              <button className="reset-signal-button" type="button" onClick={resetSignalResult}>
+              <button className="reset-signal-button" type="button" onClick={handleResetSignal}>
                 <RotateCcw size={17} />
-                <span>{"\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u0441\u0438\u0433\u043d\u0430\u043b"}</span>
+                <span>{t("signal.reset")}</span>
               </button>
             </div>
+            <section className="tradingview-panel">
+              <div className="tradingview-heading">
+                <span>
+                  <BarChart3 size={18} />
+                  <strong>{t("signal.chartTitle")}</strong>
+                </span>
+                <small>TradingView</small>
+              </div>
+              <p>{t("signal.chartNote")}</p>
+              <TradingViewWidget pair={tradingPair} language={resolveLanguage(language)} />
+            </section>
+            </>
           )}
         </section>
       </main>
