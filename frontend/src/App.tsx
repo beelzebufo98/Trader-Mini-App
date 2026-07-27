@@ -584,7 +584,7 @@ export function App() {
                 <strong>{analysisProgress}%</strong>
                 <small>{analysisStages[analysisStageIndex]}</small>
               </div>
-              <p>\u0410\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u0443\u0435\u043c \u0434\u0430\u043d\u043d\u044b\u0435 \u0440\u044b\u043d\u043a\u0430<br />\u0438 \u0438\u0449\u0435\u043c \u043b\u0443\u0447\u0448\u0438\u0435 \u0442\u043e\u0447\u043a\u0438 \u0432\u0445\u043e\u0434\u0430...</p>
+              <p>{"\u0410\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u0443\u0435\u043c \u0434\u0430\u043d\u043d\u044b\u0435 \u0440\u044b\u043d\u043a\u0430"}<br />{"\u0438 \u0438\u0449\u0435\u043c \u043b\u0443\u0447\u0448\u0438\u0435 \u0442\u043e\u0447\u043a\u0438 \u0432\u0445\u043e\u0434\u0430..."}</p>
               <div className="analysis-bars" aria-hidden="true">
                 {analysisStages.map((stage, index) => (
                   <span className={index <= analysisStageIndex ? "active" : ""} key={stage} />
@@ -597,7 +597,7 @@ export function App() {
             <div className={signalResult.direction === "CALL" ? "result-panel call" : "result-panel put"}>
               <div className="result-heading">
                 <Check size={18} />
-                <strong>\u0421\u0438\u0433\u043d\u0430\u043b \u0433\u043e\u0442\u043e\u0432</strong>
+                <strong>{"\u0421\u0438\u0433\u043d\u0430\u043b \u0433\u043e\u0442\u043e\u0432"}</strong>
               </div>
               <p>{tradingPair} · {selectedExpiration?.shortLabel} · {model}</p>
 
@@ -610,7 +610,7 @@ export function App() {
               </div>
 
               <div className="confidence-row">
-                <span>\u0423\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0441\u0442\u044c</span>
+                <span>{"\u0423\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0441\u0442\u044c"}</span>
                 <strong>{signalResult.confidence}%</strong>
               </div>
               <div className="confidence-track">
@@ -624,7 +624,7 @@ export function App() {
 
               <button className="reset-signal-button" type="button" onClick={resetSignalResult}>
                 <RotateCcw size={17} />
-                <span>\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u0441\u0438\u0433\u043d\u0430\u043b</span>
+                <span>{"\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u0441\u0438\u0433\u043d\u0430\u043b"}</span>
               </button>
             </div>
           )}

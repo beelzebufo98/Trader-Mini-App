@@ -1051,7 +1051,9 @@ button {
   display: grid;
   gap: 14px;
   border: 1px solid rgba(76, 208, 91, 0.32);
-  padding: 16px;
+  width: 100%;
+  min-width: 0;
+  padding: 14px;
   background:
     linear-gradient(180deg, rgba(18, 76, 30, 0.72), rgba(5, 18, 10, 0.88)),
     rgba(5, 9, 14, 0.94);
@@ -1091,12 +1093,12 @@ button {
 
 .direction-card {
   display: grid;
-  grid-template-columns: 82px 1fr;
+  grid-template-columns: 68px minmax(0, 1fr);
   align-items: center;
   min-height: 118px;
   border: 1px solid rgba(76, 208, 91, 0.22);
   border-radius: 12px;
-  padding: 0 22px;
+  padding: 0 16px;
   background: rgba(76, 208, 91, 0.12);
   color: #73df76;
 }
@@ -1113,9 +1115,10 @@ button {
 }
 
 .direction-card strong {
-  font-size: 34px;
+  font-size: clamp(26px, 8vw, 34px);
   line-height: 1;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .direction-card small {
