@@ -155,13 +155,25 @@ def mini_app_keyboard(language: str) -> dict[str, Any]:
     }
 
 
+def get_saved_language(db: Session, user: dict[str, Any]) -> str | None:
+    telegram_id = user.get("id")
+    if telegram_id is None:
+        return None
+
+    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
+    if settings_row is None or settings_row.language not in SUPPORTED_LANGUAGES:
+        return None
+
+    return settings_row.language
+
+
 @router.post("/webhook", summary="Telegram bot webhook")
 def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
     ensure_telegram_configured()
 
     callback_query = update.get("callback_query")
     if callback_query:
-        handle_callback_query(callback_query)
+        handle_callback_query(callback_query, db)
         return {"ok": True}
 
     message = update.get("message") or {}
@@ -193,16 +205,20 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
     return {"ok": True}
 
 
-def handle_callback_query(callback_query: dict[str, Any]) -> None:
+def handle_callback_query(callback_query: dict[str, Any], db: Session) -> None:
     callback_id = callback_query.get("id")
     data = callback_query.get("data")
     user = callback_query.get("from") or {}
     message = callback_query.get("message") or {}
     chat = message.get("chat") or {}
     chat_id = chat.get("id")
-    language = normalize_language(user.get("language_code"))
+    saved_language = get_saved_language(db, user)
+    language = saved_language or normalize_language(user.get("language_code"))
     text = BOT_TEXTS[language]
-    print(f"telegram_callback data={data} language_code={user.get('language_code')} normalized_language={language}")
+    print(
+        f"telegram_callback data={data} language_code={user.get('language_code')} "
+        f"saved_language={saved_language} normalized_language={language}"
+    )
 
     with httpx.Client(timeout=10) as client:
         if callback_id:
