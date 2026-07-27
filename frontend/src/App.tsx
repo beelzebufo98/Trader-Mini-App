@@ -1,4 +1,19 @@
-import { ArrowLeft, BarChart3, ChevronDown, Clock3, Globe2, Repeat2, Search, Settings2, Star, Zap } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  BarChart3,
+  Check,
+  ChevronDown,
+  Clock3,
+  Globe2,
+  Repeat2,
+  RotateCcw,
+  Search,
+  Settings2,
+  Star,
+  TrendingDown,
+  Zap
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchUserSettings, saveUserSettings } from "./api";
@@ -24,8 +39,35 @@ const otcPairs = [
   "USD/RUB OTC", "USD/COP OTC", "AUD/CHF OTC", "USD/CNH OTC", "USD/JPY OTC", "GBP/JPY OTC",
   "YER/USD OTC", "NZD/JPY OTC", "LBP/USD OTC"
 ];
-const modelOptions = ["Paradox Classic", "Impulse", "Reversal", "Trend Flow"];
-const expirationOptions = ["1 min", "3 min", "5 min", "15 min"];
+const modelOptions = ["AI Target", "FVG Imbalance", "Fractals", "Fibonacci", "RSI Model", "MACD Model"];
+const expirationOptions = [
+  { value: "1", shortLabel: "1m" },
+  { value: "3", shortLabel: "3m" },
+  { value: "5", shortLabel: "5m" },
+  { value: "15", shortLabel: "15m" },
+  { value: "30", shortLabel: "30m" }
+];
+const modelConfidenceFloor: Record<string, number> = {
+  "AI Target": 82,
+  "FVG Imbalance": 78,
+  Fractals: 76,
+  Fibonacci: 75,
+  "RSI Model": 77,
+  "MACD Model": 79
+};
+const analysisStages = [
+  "\u0410\u043d\u0430\u043b\u0438\u0437 \u0440\u044b\u043d\u043a\u0430",
+  "\u041f\u043e\u0438\u0441\u043a \u0441\u0435\u0442\u0430\u043f\u043e\u0432",
+  "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043c\u043e\u0434\u0435\u043b\u0438",
+  "\u0420\u0430\u0441\u0447\u0435\u0442 \u0432\u0435\u0440\u043e\u044f\u0442\u043d\u043e\u0441\u0442\u0438",
+  "\u0424\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0441\u0438\u0433\u043d\u0430\u043b\u0430"
+];
+
+type SignalResult = {
+  confidence: number;
+  direction: "CALL" | "PUT";
+  createdAt: string;
+};
 
 const localStorageKeys = {
   market: "paradox_fx_market",
@@ -85,6 +127,9 @@ export function App() {
   const [expiration, setExpiration] = useState("");
   const [touchedFields, setTouchedFields] = useState<Set<string>>(() => new Set());
   const [signalStatus, setSignalStatus] = useState<"idle" | "invalid" | "generating" | "ready">("idle");
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisStageIndex, setAnalysisStageIndex] = useState(0);
+  const [signalResult, setSignalResult] = useState<SignalResult | null>(null);
   const [settingsStatus, setSettingsStatus] = useState<"local" | "synced" | "unavailable">("local");
 
   useEffect(() => {
@@ -107,7 +152,9 @@ export function App() {
           localStorage.getItem(localStorageKeys.languageManual) === "1" &&
           localStorage.getItem(localStorageKeys.languageVersion) === languagePreferenceVersion;
 
-        if (hasCurrentManualPreference) {
+        if (settings.language && settings.language !== "auto") {
+          setLanguage(normalizeLanguage(settings.language));
+        } else if (hasCurrentManualPreference) {
           setLanguage(normalizeLanguage(settings.language === "auto" ? resolveLanguage("auto") : settings.language));
         } else {
           setLanguage(detectAppLanguage());
@@ -137,6 +184,21 @@ export function App() {
     localStorage.setItem(localStorageKeys.favoritePairs, JSON.stringify([...favoritePairs]));
   }, [favoritePairs]);
 
+  useEffect(() => {
+    if (signalStatus !== "generating") return;
+
+    const startedAt = Date.now();
+    const durationMs = 3600;
+    const progressTimer = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const progress = Math.min(99, Math.round((elapsed / durationMs) * 100));
+      setAnalysisProgress(progress);
+      setAnalysisStageIndex(Math.min(analysisStages.length - 1, Math.floor((progress / 100) * analysisStages.length)));
+    }, 90);
+
+    return () => window.clearInterval(progressTimer);
+  }, [signalStatus]);
+
   async function persistSelection(nextMarket = market, nextLanguage = language) {
     localStorage.setItem(localStorageKeys.market, nextMarket);
     localStorage.setItem(localStorageKeys.language, nextLanguage);
@@ -163,6 +225,7 @@ export function App() {
     setPairSearch("");
     setMarketOpen(false);
     setPairOpen(false);
+    resetSignalResult();
     persistSelection(nextMarket, language);
   }
 
@@ -180,10 +243,24 @@ export function App() {
   const isPairMissing = !tradingPair;
   const isModelMissing = !model;
   const isExpirationMissing = !expiration;
+  const isSignalReady = !isMarketMissing && !isPairMissing && !isModelMissing && !isExpirationMissing;
   const availablePairs = market === "OTC" ? otcPairs : forexPairs;
   const filteredPairs = availablePairs
     .filter((pair) => pair.toLowerCase().includes(pairSearch.trim().toLowerCase()))
     .sort((first, second) => Number(favoritePairs.has(second)) - Number(favoritePairs.has(first)));
+  const selectedExpiration = expirationOptions.find((option) => option.value === expiration);
+
+  function getExpirationLabel(minutes: string) {
+    const languageCode = resolveLanguage(language);
+    if (languageCode === "ru") {
+      if (minutes === "1") return "1 \u043c\u0438\u043d\u0443\u0442\u0430";
+      if (minutes === "3") return "3 \u043c\u0438\u043d\u0443\u0442\u044b";
+      if (minutes === "5") return "5 \u043c\u0438\u043d\u0443\u0442";
+      if (minutes === "15") return "15 \u043c\u0438\u043d\u0443\u0442";
+      if (minutes === "30") return "30 \u043c\u0438\u043d\u0443\u0442";
+    }
+    return `${minutes} min`;
+  }
 
   function markField(field: string) {
     setTouchedFields((current) => {
@@ -201,23 +278,33 @@ export function App() {
     });
   }
 
+  function resetSignalResult() {
+    setSignalStatus("idle");
+    setAnalysisProgress(0);
+    setAnalysisStageIndex(0);
+    setSignalResult(null);
+  }
+
   function handlePairSelect(nextPair: string) {
     setTradingPair(nextPair);
     setPairOpen(false);
     setPairSearch("");
     clearFieldError("pair");
+    resetSignalResult();
   }
 
   function handleModelSelect(nextModel: string) {
     setModel(nextModel);
     setModelOpen(false);
     clearFieldError("model");
+    resetSignalResult();
   }
 
   function handleExpirationSelect(nextExpiration: string) {
     setExpiration(nextExpiration);
     setExpirationOpen(false);
     clearFieldError("expiration");
+    resetSignalResult();
   }
 
   function toggleFavoritePair(pair: string) {
@@ -233,6 +320,8 @@ export function App() {
   }
 
   function handleGenerateSignal() {
+    if (signalStatus === "generating") return;
+
     const missingFields = [
       ["market", isMarketMissing],
       ["pair", isPairMissing],
@@ -246,8 +335,31 @@ export function App() {
       return;
     }
 
+    const confidenceFloor = modelConfidenceFloor[model] ?? 75;
+    const confidence = confidenceFloor + Math.floor(Math.random() * (101 - confidenceFloor));
+    const direction = Math.random() > 0.5 ? "CALL" : "PUT";
+
+    setPairOpen(false);
+    setModelOpen(false);
+    setExpirationOpen(false);
+    setSignalResult(null);
+    setAnalysisProgress(0);
+    setAnalysisStageIndex(0);
     setSignalStatus("generating");
-    window.setTimeout(() => setSignalStatus("ready"), 1100);
+    window.setTimeout(() => {
+      setAnalysisProgress(100);
+      setAnalysisStageIndex(analysisStages.length - 1);
+      setSignalResult({
+        confidence,
+        direction,
+        createdAt: new Date().toLocaleTimeString(resolveLanguage(language), {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        })
+      });
+      setSignalStatus("ready");
+    }, 3600);
   }
 
   if (screen === "dashboard") {
@@ -389,16 +501,17 @@ export function App() {
               </button>
 
               {isModelOpen && (
-                <div className="option-menu">
+                <div className="model-list">
                   {modelOptions.map((option) => (
                     <button
-                      className={model === option ? "option-row active" : "option-row"}
+                      className={model === option ? "model-option active" : "model-option"}
                       key={option}
                       type="button"
                       onClick={() => handleModelSelect(option)}
                     >
                       <Settings2 size={17} />
                       <span>{option}</span>
+                      <i />
                     </button>
                   ))}
                 </div>
@@ -417,22 +530,22 @@ export function App() {
                 <Clock3 size={20} />
                 <span>
                   <strong>{t("dashboard.expiration")}</strong>
-                  <small>{expiration || t("dashboard.expirationPlaceholder")}</small>
+                  <small>{selectedExpiration ? getExpirationLabel(selectedExpiration.value) : t("dashboard.expirationPlaceholder")}</small>
                 </span>
                 <ChevronDown size={18} />
               </button>
 
               {isExpirationOpen && (
-                <div className="option-menu compact">
+                <div className="expiration-grid">
                   {expirationOptions.map((option) => (
                     <button
-                      className={expiration === option ? "option-row active" : "option-row"}
-                      key={option}
+                      className={expiration === option.value ? "expiration-option active" : "expiration-option"}
+                      key={option.value}
                       type="button"
-                      onClick={() => handleExpirationSelect(option)}
+                      onClick={() => handleExpirationSelect(option.value)}
                     >
-                      <Clock3 size={17} />
-                      <span>{option}</span>
+                      <strong>{option.shortLabel}</strong>
+                      <span>{getExpirationLabel(option.value)}</span>
                     </button>
                   ))}
                 </div>
@@ -440,7 +553,12 @@ export function App() {
             </div>
 
             <button
-              className={signalStatus === "generating" ? "continue-button signal-button generating" : "continue-button signal-button"}
+              className={[
+                "continue-button",
+                "signal-button",
+                isSignalReady ? "ready" : "pending",
+                signalStatus === "generating" ? "generating" : ""
+              ].join(" ")}
               type="button"
               onClick={handleGenerateSignal}
             >
@@ -457,11 +575,57 @@ export function App() {
             </div>
           )}
 
-          {signalStatus === "ready" && (
-            <div className="validation-note ready">
-              <span>✓</span>
-              <strong>{t("dashboard.readyTitle")}</strong>
-              <small>{t("dashboard.readyText")}</small>
+          {signalStatus === "generating" && (
+            <div className="analysis-panel">
+              <div className="analysis-radar">
+                <span className="radar-ring" />
+                <span className="radar-ring second" />
+                <span className="radar-ring third" />
+                <strong>{analysisProgress}%</strong>
+                <small>{analysisStages[analysisStageIndex]}</small>
+              </div>
+              <p>\u0410\u043d\u0430\u043b\u0438\u0437\u0438\u0440\u0443\u0435\u043c \u0434\u0430\u043d\u043d\u044b\u0435 \u0440\u044b\u043d\u043a\u0430<br />\u0438 \u0438\u0449\u0435\u043c \u043b\u0443\u0447\u0448\u0438\u0435 \u0442\u043e\u0447\u043a\u0438 \u0432\u0445\u043e\u0434\u0430...</p>
+              <div className="analysis-bars" aria-hidden="true">
+                {analysisStages.map((stage, index) => (
+                  <span className={index <= analysisStageIndex ? "active" : ""} key={stage} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {signalStatus === "ready" && signalResult && (
+            <div className={signalResult.direction === "CALL" ? "result-panel call" : "result-panel put"}>
+              <div className="result-heading">
+                <Check size={18} />
+                <strong>\u0421\u0438\u0433\u043d\u0430\u043b \u0433\u043e\u0442\u043e\u0432</strong>
+              </div>
+              <p>{tradingPair} · {selectedExpiration?.shortLabel} · {model}</p>
+
+              <div className="direction-card">
+                {signalResult.direction === "CALL" ? <ArrowUpRight size={58} /> : <TrendingDown size={58} />}
+                <span>
+                  <strong>{signalResult.direction === "CALL" ? "\u0412\u0432\u0435\u0440\u0445" : "\u0412\u043d\u0438\u0437"}</strong>
+                  <small>{signalResult.direction}</small>
+                </span>
+              </div>
+
+              <div className="confidence-row">
+                <span>\u0423\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0441\u0442\u044c</span>
+                <strong>{signalResult.confidence}%</strong>
+              </div>
+              <div className="confidence-track">
+                <span style={{ width: `${signalResult.confidence}%` }} />
+              </div>
+
+              <div className="result-time">
+                <Clock3 size={17} />
+                <span>{signalResult.createdAt}</span>
+              </div>
+
+              <button className="reset-signal-button" type="button" onClick={resetSignalResult}>
+                <RotateCcw size={17} />
+                <span>\u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u0441\u0438\u0433\u043d\u0430\u043b</span>
+              </button>
             </div>
           )}
         </section>

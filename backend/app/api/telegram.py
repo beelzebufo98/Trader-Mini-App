@@ -1,13 +1,25 @@
+import re
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.database import get_db
+from app.models.user_settings import UserSettings
 
 router = APIRouter()
 
 SUPPORTED_LANGUAGES = {"ru", "en", "es", "pt", "tr", "ar"}
+LANGUAGE_ALIASES = {
+    "russian": "ru",
+    "english": "en",
+    "spanish": "es",
+    "portuguese": "pt",
+    "turkish": "tr",
+    "arabic": "ar",
+}
 
 BOT_TEXTS = {
     "ru": {
@@ -92,6 +104,47 @@ def normalize_language(language_code: str | None) -> str:
     return language if language in SUPPORTED_LANGUAGES else "en"
 
 
+def parse_start_language(text: str | None) -> str | None:
+    if not text:
+        return None
+
+    parts = text.strip().split(maxsplit=1)
+    if not parts or not parts[0].startswith("/start") or len(parts) < 2:
+        return None
+
+    payload = parts[1].strip().lower()
+    tokens = [token for token in re.split(r"[^a-z]+", payload) if token]
+    for token in tokens:
+        if token in SUPPORTED_LANGUAGES:
+            return token
+        if token in LANGUAGE_ALIASES:
+            return LANGUAGE_ALIASES[token]
+
+    return None
+
+
+def save_start_language(db: Session, user: dict[str, Any], language: str) -> None:
+    telegram_id = user.get("id")
+    if telegram_id is None:
+        return
+
+    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
+    if settings_row is None:
+        settings_row = UserSettings(
+            telegram_id=telegram_id,
+            username=user.get("username"),
+            first_name=user.get("first_name"),
+            language=language,
+        )
+        db.add(settings_row)
+    else:
+        settings_row.username = user.get("username")
+        settings_row.first_name = user.get("first_name")
+        settings_row.language = language
+
+    db.commit()
+
+
 def mini_app_keyboard(language: str) -> dict[str, Any]:
     text = BOT_TEXTS[language]
     return {
@@ -103,7 +156,7 @@ def mini_app_keyboard(language: str) -> dict[str, Any]:
 
 
 @router.post("/webhook", summary="Telegram bot webhook")
-def telegram_webhook(update: dict[str, Any]):
+def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
     ensure_telegram_configured()
 
     callback_query = update.get("callback_query")
@@ -116,11 +169,16 @@ def telegram_webhook(update: dict[str, Any]):
     chat = message.get("chat") or {}
     user = message.get("from") or {}
     chat_id = chat.get("id")
-    language = normalize_language(user.get("language_code"))
-    print(f"telegram_start language_code={user.get('language_code')} normalized_language={language}")
+    language = parse_start_language(text) or normalize_language(user.get("language_code"))
+    print(
+        f"telegram_start language_code={user.get('language_code')} "
+        f"start_language={parse_start_language(text)} normalized_language={language}"
+    )
 
-    if text != "/start" or chat_id is None:
+    if not text or not text.startswith("/start") or chat_id is None:
         return {"ok": True}
+
+    save_start_language(db, user, language)
 
     payload = {
         "chat_id": chat_id,
