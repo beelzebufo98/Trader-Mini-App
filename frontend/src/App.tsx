@@ -48,17 +48,16 @@ const expirationOptions = [
   { value: "15", shortLabel: "15m" },
   { value: "30", shortLabel: "30m" }
 ];
-const modelConfidenceFloor: Record<string, number> = {
-  "AI Target": 82,
-  "FVG Imbalance": 78,
-  Fractals: 76,
-  Fibonacci: 75,
-  "RSI Model": 77,
-  "MACD Model": 79
+type SignalDirection = "CALL" | "PUT";
+type SignalLock = {
+  direction: SignalDirection;
+  expiresAt: number;
 };
+type SignalLocks = Record<string, SignalLock>;
+
 type SignalResult = {
   confidence: number;
-  direction: "CALL" | "PUT";
+  direction: SignalDirection;
   createdAt: string;
 };
 
@@ -67,10 +66,12 @@ const localStorageKeys = {
   language: "paradox_fx_language",
   languageManual: "paradox_fx_language_manual",
   languageVersion: "paradox_fx_language_version",
-  favoritePairs: "paradox_fx_favorite_pairs"
+  favoritePairs: "paradox_fx_favorite_pairs",
+  signalLocks: "paradox_fx_signal_locks"
 };
 
 const languagePreferenceVersion = "2";
+const signalLockDurationMs = 2 * 60 * 1000;
 
 function readLocalMarket(): MarketType {
   return localStorage.getItem(localStorageKeys.market) === "OTC" ? "OTC" : "FOREX";
@@ -95,6 +96,94 @@ function normalizeLanguage(value: unknown): AppLanguage {
 
 function normalizeMarket(value: unknown): MarketType {
   return value === "OTC" ? "OTC" : "FOREX";
+}
+
+function secureRandBelow(maxExclusive: number) {
+  const values = new Uint32Array(1);
+  const maxUint32 = 0xffffffff;
+  const limit = maxUint32 - (maxUint32 % maxExclusive);
+
+  do {
+    crypto.getRandomValues(values);
+  } while (values[0] >= limit);
+
+  return values[0] % maxExclusive;
+}
+
+function isSignalDirection(value: unknown): value is SignalDirection {
+  return value === "CALL" || value === "PUT";
+}
+
+function normalizeAssetKey(pair: string) {
+  return pair.trim().toUpperCase();
+}
+
+function pruneSignalLocks(locks: SignalLocks, now = Date.now()): SignalLocks {
+  const nextLocks: SignalLocks = {};
+
+  Object.entries(locks).forEach(([asset, lock]) => {
+    if (isSignalDirection(lock.direction) && Number.isFinite(lock.expiresAt) && lock.expiresAt > now) {
+      nextLocks[asset] = lock;
+    }
+  });
+
+  return nextLocks;
+}
+
+function readSignalLocks(): SignalLocks {
+  try {
+    const rawLocks = localStorage.getItem(localStorageKeys.signalLocks);
+    if (!rawLocks) return {};
+
+    const parsedLocks = JSON.parse(rawLocks);
+    if (!parsedLocks || typeof parsedLocks !== "object" || Array.isArray(parsedLocks)) return {};
+
+    const locks: SignalLocks = {};
+    Object.entries(parsedLocks as Record<string, unknown>).forEach(([asset, value]) => {
+      if (!value || typeof value !== "object") return;
+
+      const candidate = value as Partial<SignalLock>;
+      if (isSignalDirection(candidate.direction) && typeof candidate.expiresAt === "number") {
+        locks[asset] = {
+          direction: candidate.direction,
+          expiresAt: candidate.expiresAt
+        };
+      }
+    });
+
+    return pruneSignalLocks(locks);
+  } catch {
+    return {};
+  }
+}
+
+function writeSignalLocks(locks: SignalLocks) {
+  try {
+    localStorage.setItem(localStorageKeys.signalLocks, JSON.stringify(locks));
+  } catch {
+    // Signal locking is a UX rule; if storage is unavailable, generation still works.
+  }
+}
+
+function getDirectionForAsset(pair: string): SignalDirection {
+  const now = Date.now();
+  const assetKey = normalizeAssetKey(pair);
+  const locks = pruneSignalLocks(readSignalLocks(), now);
+  const activeLock = locks[assetKey];
+
+  if (activeLock) {
+    writeSignalLocks(locks);
+    return activeLock.direction;
+  }
+
+  const direction: SignalDirection = secureRandBelow(2) === 0 ? "CALL" : "PUT";
+  locks[assetKey] = {
+    direction,
+    expiresAt: now + signalLockDurationMs
+  };
+  writeSignalLocks(locks);
+
+  return direction;
 }
 
 export function App() {
@@ -123,7 +212,6 @@ export function App() {
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisStageIndex, setAnalysisStageIndex] = useState(0);
   const [signalResult, setSignalResult] = useState<SignalResult | null>(null);
-  const [settingsStatus, setSettingsStatus] = useState<"local" | "synced" | "unavailable">("local");
 
   useEffect(() => {
     window.Telegram?.WebApp?.ready();
@@ -168,9 +256,8 @@ export function App() {
         } else {
           setLanguage(detectAppLanguage());
         }
-        setSettingsStatus("synced");
       } catch (error) {
-        if (!controller.signal.aborted) setSettingsStatus("unavailable");
+        if (!controller.signal.aborted) console.warn("Unable to load user settings", error);
       }
     }
 
@@ -217,9 +304,9 @@ export function App() {
         market: nextMarket,
         language: nextLanguage
       });
-      if (saved) setSettingsStatus("synced");
+      if (!saved) console.warn("User settings were not saved");
     } catch (error) {
-      setSettingsStatus("unavailable");
+      console.warn("Unable to save user settings", error);
     }
   }
 
@@ -362,9 +449,8 @@ export function App() {
       return;
     }
 
-    const confidenceFloor = modelConfidenceFloor[model] ?? 75;
-    const confidence = confidenceFloor + Math.floor(Math.random() * (101 - confidenceFloor));
-    const direction = Math.random() > 0.5 ? "CALL" : "PUT";
+    const confidence = secureRandBelow(31) + 70;
+    const direction = getDirectionForAsset(tradingPair);
 
     setPairOpen(false);
     setModelOpen(false);
@@ -777,8 +863,6 @@ export function App() {
           <Zap size={18} />
           <span>{t("intro.continue")}</span>
         </button>
-
-        <div className={`sync-pill ${settingsStatus}`}>{settingsStatus}</div>
       </section>
     </main>
   );
