@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 from app.api.health import router as health_router
 from app.api.me import router as me_router
+from app.api.pocket_option import router as pocket_option_router
 from app.api.telegram import router as telegram_router
 from app.config import settings
 from app.database import Base, engine
@@ -20,6 +21,7 @@ app.add_middleware(
 
 app.include_router(health_router, prefix="/health", tags=["health"])
 app.include_router(me_router, prefix="/api/v1/me", tags=["me"])
+app.include_router(pocket_option_router, prefix="/api/v1/pocket-option", tags=["pocket-option"])
 app.include_router(telegram_router, prefix="/api/v1/telegram", tags=["telegram"])
 
 

@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     telegram_bot_token: str = ""
     telegram_webapp_url: str = ""
+    pocket_option_partner_id: str = ""
+    pocket_option_api_token: str = ""
+    pocket_option_api_base_url: str = "https://affiliate.pocketoption.com/api"
 
     @property
     def cors_origin_list(self) -> list[str]:
