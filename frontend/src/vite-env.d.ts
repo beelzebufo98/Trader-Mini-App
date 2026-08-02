@@ -14,6 +14,9 @@ interface Window {
       };
       setHeaderColor?: (color: string) => void;
       setBackgroundColor?: (color: string) => void;
+      HapticFeedback?: {
+        notificationOccurred?: (type: "error" | "success" | "warning") => void;
+      };
       BackButton?: {
         show: () => void;
         hide: () => void;

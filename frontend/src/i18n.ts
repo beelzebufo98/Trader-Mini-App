@@ -8,7 +8,7 @@ const signalBase = {
     "3": "3 min",
     "5": "5 min",
     "15": "15 min",
-    "30": "30 min"
+    "30s": "30 sec"
   }
 };
 
@@ -23,7 +23,9 @@ const resources = {
         languageTitle: "Language",
         continue: "Continue",
         forex: "Forex market",
-        otc: "OTC market"
+        otc: "OTC market",
+        marketClosedTitle: "Market close",
+        marketClosedReason: "Holiday"
       },
       dashboard: {
         back: "Back",
@@ -85,7 +87,9 @@ const resources = {
         languageTitle: "Язык",
         continue: "Продолжить",
         forex: "Forex рынок",
-        otc: "OTC рынок"
+        otc: "OTC рынок",
+        marketClosedTitle: "Рынок закрыт",
+        marketClosedReason: "Выходной"
       },
       dashboard: {
         back: "Назад",
@@ -129,7 +133,7 @@ const resources = {
           "3": "3 минуты",
           "5": "5 минут",
           "15": "15 минут",
-          "30": "30 минут"
+          "30s": "30 секунд"
         }
       },
       languages: {
@@ -153,7 +157,9 @@ const resources = {
         languageTitle: "Idioma",
         continue: "Continuar",
         forex: "Mercado Forex",
-        otc: "Mercado OTC"
+        otc: "Mercado OTC",
+        marketClosedTitle: "Mercado cerrado",
+        marketClosedReason: "Festivo"
       },
       dashboard: {
         back: "Atrás",
@@ -215,7 +221,9 @@ const resources = {
         languageTitle: "Idioma",
         continue: "Continuar",
         forex: "Mercado Forex",
-        otc: "Mercado OTC"
+        otc: "Mercado OTC",
+        marketClosedTitle: "Mercado fechado",
+        marketClosedReason: "Feriado"
       },
       dashboard: {
         back: "Voltar",
@@ -277,7 +285,9 @@ const resources = {
         languageTitle: "Dil",
         continue: "Devam",
         forex: "Forex piyasası",
-        otc: "OTC piyasası"
+        otc: "OTC piyasası",
+        marketClosedTitle: "Piyasa kapalı",
+        marketClosedReason: "Tatil"
       },
       dashboard: {
         back: "Geri",
@@ -339,7 +349,9 @@ const resources = {
         languageTitle: "اللغة",
         continue: "متابعة",
         forex: "سوق Forex",
-        otc: "سوق OTC"
+        otc: "سوق OTC",
+        marketClosedTitle: "السوق مغلق",
+        marketClosedReason: "عطلة"
       },
       dashboard: {
         back: "رجوع",

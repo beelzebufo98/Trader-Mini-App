@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   ArrowUpRight,
   BarChart3,
+  CalendarDays,
   Check,
   ChevronDown,
   Clock3,
@@ -42,11 +43,11 @@ const otcPairs = [
 ];
 const modelOptions = ["AI Target", "FVG Imbalance", "Fractals", "Fibonacci", "RSI Model", "MACD Model"];
 const expirationOptions = [
+  { value: "30s", shortLabel: "30s" },
   { value: "1", shortLabel: "1m" },
   { value: "3", shortLabel: "3m" },
   { value: "5", shortLabel: "5m" },
-  { value: "15", shortLabel: "15m" },
-  { value: "30", shortLabel: "30m" }
+  { value: "15", shortLabel: "15m" }
 ];
 type SignalDirection = "CALL" | "PUT";
 type SignalLock = {
@@ -72,6 +73,11 @@ const localStorageKeys = {
 
 const languagePreferenceVersion = "2";
 const signalLockDurationMs = 2 * 60 * 1000;
+
+function isForexClosedByLocalTime(date = new Date()) {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
 
 function readLocalMarket(): MarketType {
   return localStorage.getItem(localStorageKeys.market) === "OTC" ? "OTC" : "FOREX";
@@ -212,6 +218,7 @@ export function App() {
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [analysisStageIndex, setAnalysisStageIndex] = useState(0);
   const [signalResult, setSignalResult] = useState<SignalResult | null>(null);
+  const [isForexClosed, setForexClosed] = useState(() => isForexClosedByLocalTime());
 
   useEffect(() => {
     window.Telegram?.WebApp?.ready();
@@ -235,6 +242,14 @@ export function App() {
       backButton.offClick(handleBack);
     };
   }, [screen, signalStatus]);
+
+  useEffect(() => {
+    const updateForexStatus = () => setForexClosed(isForexClosedByLocalTime());
+    const timer = window.setInterval(updateForexStatus, 60 * 1000);
+
+    updateForexStatus();
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -311,6 +326,11 @@ export function App() {
   }
 
   async function handleContinue() {
+    if (market === "FOREX" && isForexClosed) {
+      window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred?.("warning");
+      return;
+    }
+
     await persistSelection();
     setScreen("dashboard");
   }
@@ -348,6 +368,7 @@ export function App() {
   }
 
   const languageLabel = t(`languages.${normalizeLanguage(language)}`);
+  const isForexSelectionClosed = market === "FOREX" && isForexClosed;
   const isMarketMissing = !market;
   const isPairMissing = !tradingPair;
   const isModelMissing = !model;
@@ -754,17 +775,19 @@ export function App() {
                 <span>{t("signal.reset")}</span>
               </button>
             </div>
-            <section className="tradingview-panel">
-              <div className="tradingview-heading">
-                <span>
-                  <BarChart3 size={18} />
-                  <strong>{t("signal.chartTitle")}</strong>
-                </span>
-                <small>TradingView</small>
-              </div>
-              <p>{t("signal.chartNote")}</p>
-              <TradingViewWidget pair={tradingPair} language={resolveLanguage(language)} />
-            </section>
+            {market === "FOREX" && (
+              <section className="tradingview-panel">
+                <div className="tradingview-heading">
+                  <span>
+                    <BarChart3 size={18} />
+                    <strong>{t("signal.chartTitle")}</strong>
+                  </span>
+                  <small>TradingView</small>
+                </div>
+                <p>{t("signal.chartNote")}</p>
+                <TradingViewWidget pair={tradingPair} language={resolveLanguage(language)} />
+              </section>
+            )}
             </>
           )}
         </section>
@@ -785,6 +808,15 @@ export function App() {
         </div>
 
         <div className="hero-visual" aria-hidden="true">
+          {isForexSelectionClosed && (
+            <div className="market-close-badge">
+              <CalendarDays size={17} />
+              <span>
+                <strong>{t("intro.marketClosedTitle")}</strong>
+                <small>{t("intro.marketClosedReason")}</small>
+              </span>
+            </div>
+          )}
           <div className="brand-block">
             <span>PARADOX <strong>FX</strong></span>
             <small>{t("intro.eyebrow")}</small>
@@ -859,7 +891,12 @@ export function App() {
           )}
         </div>
 
-        <button className="continue-button" type="button" onClick={handleContinue}>
+        <button
+          className={isForexSelectionClosed ? "continue-button disabled" : "continue-button"}
+          type="button"
+          disabled={isForexSelectionClosed}
+          onClick={handleContinue}
+        >
           <Zap size={18} />
           <span>{t("intro.continue")}</span>
         </button>
