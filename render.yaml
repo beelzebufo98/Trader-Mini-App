@@ -20,6 +20,28 @@ services:
         sync: false
       - key: TELEGRAM_WEBAPP_URL
         value: https://trader-mini-frontend.onrender.com
+      - key: TELEGRAM_FUNNEL_ENABLED
+        value: "false"
+      - key: TELEGRAM_FUNNEL_ALLOWED_USER_IDS
+        sync: false
+      - key: TELEGRAM_SOURCE_CHANNEL_ID
+        sync: false
+      - key: TEAM_VIP_URL
+        sync: false
+      - key: POCKET_OPTION_PARTNER_ID
+        sync: false
+      - key: POCKET_OPTION_API_TOKEN
+        sync: false
+      - key: POCKET_OPTION_API_BASE_URL
+        value: https://affiliate.pocketoption.com/api
+      - key: POCKET_OPTION_REF_RU_URL
+        sync: false
+      - key: POCKET_OPTION_REF_WW_URL
+        sync: false
+      - key: DEVSBITE_CLIENT_TOKEN
+        sync: false
+      - key: DEVSBITE_API_BASE_URL
+        value: https://api.devsbite.com
 
   - type: web
     name: trader-mini-frontend

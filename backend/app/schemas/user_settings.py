@@ -8,6 +8,7 @@ VALID_IMPACTS = {"HIGH", "MEDIUM", "LOW", "HOLIDAY"}
 VALID_NEWS_WINDOWS = {"24H", "48H", "THIS_WEEK"}
 VALID_LANGUAGES = {"auto", "en", "ru", "es", "pt", "tr", "ar"}
 VALID_MARKETS = {"FOREX", "OTC"}
+VALID_FUNNEL_ROUTES = {"", "BOT", "TEAM"}
 
 
 class TelegramUser(BaseModel):
@@ -23,6 +24,7 @@ class UserSettingsUpdate(BaseModel):
     news_window: Optional[str] = None
     language: Optional[str] = None
     market: Optional[str] = None
+    funnel_route: Optional[str] = None
 
     @field_validator("utc_offset")
     @classmethod
@@ -84,6 +86,17 @@ class UserSettingsUpdate(BaseModel):
             raise ValueError("Unsupported market")
         return normalized
 
+    @field_validator("funnel_route")
+    @classmethod
+    def validate_funnel_route(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+
+        normalized = value.strip().upper()
+        if normalized not in VALID_FUNNEL_ROUTES:
+            raise ValueError("Unsupported funnel_route")
+        return normalized
+
 
 class UserSettingsRead(BaseModel):
     telegram_id: int
@@ -95,6 +108,7 @@ class UserSettingsRead(BaseModel):
     news_window: str
     language: str
     market: str
+    funnel_route: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

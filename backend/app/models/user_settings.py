@@ -18,5 +18,6 @@ class UserSettings(Base):
     news_window = Column(String(32), nullable=False, default="48H")
     language = Column(String(16), nullable=False, default="auto")
     market = Column(String(16), nullable=False, default="FOREX")
+    funnel_route = Column(String(16), nullable=False, default="")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

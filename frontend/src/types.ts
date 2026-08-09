@@ -3,6 +3,7 @@ export type NewsWindow = "24H" | "48H" | "THIS_WEEK";
 export type CurrencyCode = "USD" | "EUR" | "GBP" | "JPY" | "AUD" | "CAD" | "CHF" | "NZD";
 export type AppLanguage = "auto" | "en" | "ru" | "es" | "pt" | "tr" | "ar";
 export type MarketType = "FOREX" | "OTC";
+export type FunnelRoute = "" | "BOT" | "TEAM";
 
 export type UserSettings = {
   telegram_id: number;
@@ -14,4 +15,5 @@ export type UserSettings = {
   news_window: NewsWindow;
   language: AppLanguage;
   market: MarketType;
+  funnel_route: FunnelRoute;
 };

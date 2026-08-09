@@ -20,6 +20,7 @@ def serialize_settings(settings: UserSettings) -> UserSettingsRead:
         news_window=settings.news_window,
         language=settings.language,
         market=settings.market,
+        funnel_route=settings.funnel_route,
         created_at=settings.created_at,
         updated_at=settings.updated_at,
     )
@@ -69,6 +70,8 @@ def update_settings(
         settings.language = payload.language
     if payload.market is not None:
         settings.market = payload.market
+    if payload.funnel_route is not None:
+        settings.funnel_route = payload.funnel_route
 
     db.commit()
     db.refresh(settings)

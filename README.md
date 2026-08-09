@@ -35,6 +35,10 @@ DATABASE_URL=postgresql+psycopg://trader:trader@postgres:5432/trader_mini
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 TELEGRAM_BOT_TOKEN=<token from BotFather>
 TELEGRAM_WEBAPP_URL=http://localhost:5173
+TELEGRAM_FUNNEL_ENABLED=false
+TELEGRAM_FUNNEL_ALLOWED_USER_IDS=<comma-separated Telegram user ids>
+DEVSBITE_CLIENT_TOKEN=<client token>
+DEVSBITE_API_BASE_URL=https://api.devsbite.com
 ```
 
 Frontend build argument:
@@ -66,6 +70,30 @@ Frontend VITE_API_BASE_URL
 Telegram settings endpoints use Telegram Mini App `initData` validation. Set
 `TELEGRAM_BOT_TOKEN` on the backend service in Render; without it,
 `/api/v1/me/settings` is disabled.
+
+For the Telegram funnel prototype, also set:
+
+```text
+TELEGRAM_FUNNEL_ENABLED=true
+TELEGRAM_FUNNEL_ALLOWED_USER_IDS=<allowed Telegram user ids>
+DEVSBITE_CLIENT_TOKEN=<Devsbite client token>
+```
+
+Allowed users can test Devsbite analysis in the bot with:
+
+```text
+pairs forex
+pairs otc
+pairs forex 80
+pairs commodities
+pairs stocks
+pairs crypto
+quote EUR/USD
+quote AED/CNY OTC
+quote commodities Gold OTC 60
+signal EUR/USD 3
+EUR/USD 3
+```
 
 The Mini App stores:
 
