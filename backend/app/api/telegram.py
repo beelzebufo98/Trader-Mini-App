@@ -40,22 +40,6 @@ START_DEEP_LINKS = {
     "team_ru": ("TEAM", "ru"),
     "team_en": ("TEAM", "en"),
 }
-FUNNEL_NODE_MESSAGES = {
-    "BOT-01": 3,
-    "BOT-STEP-01": 11,
-    "BOT-EXISTING-ACCOUNT": 16,
-    "ID-01": 19,
-    "ID-FORMAT": 21,
-    "ID-NOT-FOUND": 23,
-    "TOPUP-01": 26,
-    "TOPUP-LOW": 29,
-    "TOPUP-NOT-FOUND": 32,
-    "BOT-SUCCESS": 35,
-    "TEAM-01": 3,
-    "TEAM-STEP-01": 40,
-    "TEAM-SUCCESS": 44,
-    "REMINDER-03": 48,
-}
 FUNNEL_BUTTON_TEXTS = {
     "ru": {
         "want_bot": "\U0001f525 \u0425\u041e\u0427\u0423 \u0411\u041e\u0422\u0410",
@@ -80,6 +64,88 @@ FUNNEL_BUTTON_TEXTS = {
         "join_team": "\U0001f525 JOIN THE TEAM",
         "callback_ok": "Done",
         "topup_pending": "Deposit verification will be connected in the next step.",
+    },
+}
+FUNNEL_NODE_TEXTS = {
+    "BOT-01": {
+        "ru": (
+            "<b><i>\u041f\u0440\u0438\u0432\u0435\u0442</i></b> \U0001f44b\n\n"
+            "<i>\u0423\u0432\u044b, \u0432 \u0442\u0440\u0435\u0439\u0434\u0438\u043d\u0433\u0435 \u043d\u0435 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u0435\u0442 \u043a\u043d\u043e\u043f\u043a\u0438, \u043a\u043e\u0442\u043e\u0440\u0430\u044f \u043d\u0430\u0436\u0438\u043c\u0430\u0435\u0442\u0441\u044f "
+            "\u043e\u0434\u0438\u043d \u0440\u0430\u0437 \u0438 \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442 \u0437\u0430\u0440\u0430\u0431\u0430\u0442\u044b\u0432\u0430\u0442\u044c \u0432\u043c\u0435\u0441\u0442\u043e \u0442\u0435\u0431\u044f.</i>\n\n"
+            "\U0001f6e4 <i>\u0414\u0430\u0436\u0435 <b>\u0441\u0430\u043c\u044b\u0439 \u0441\u0438\u043b\u044c\u043d\u044b\u0439</b> \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442 \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u0442\u043e\u043b\u044c\u043a\u043e <b>\u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u043c</b>.</i>\n\n"
+            "\u2755 <b>\u041d\u041e!</b> \u041c\u044b \u0441\u043e\u0437\u0434\u0430\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 <u>\u043c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u043e \u043e\u0431\u043b\u0435\u0433\u0447\u0438\u0442 \u0442\u0432\u043e\u0439 \u043f\u0443\u0442\u044c</u> "
+            "\u043d\u0430 \u043f\u0443\u0442\u0438 \u043a \u0431\u043e\u043b\u044c\u0448\u043e\u043c\u0443 \u0437\u0430\u0440\u0430\u0431\u043e\u0442\u043a\u0443 \u043d\u0430 \u0442\u0440\u0435\u0439\u0434\u0438\u043d\u0433\u0435.\n\n"
+            "<blockquote>\U0001f680 <b>Paradox Bot</b> \u043e\u0431\u044a\u0435\u0434\u0438\u043d\u044f\u0435\u0442 \u0430\u043b\u0433\u043e\u0440\u0438\u0442\u043c\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0430\u043d\u0430\u043b\u0438\u0437 \u0438 "
+            "<b>\u0431\u043e\u043b\u0435\u0435 30 \u0438\u043d\u0434\u0438\u043a\u0430\u0442\u043e\u0440\u043e\u0432</b>, \u0447\u0442\u043e\u0431\u044b \u043f\u043e\u043c\u043e\u0447\u044c \u0442\u0435\u0431\u0435 \u0431\u044b\u0441\u0442\u0440\u0435\u0435 \u043e\u0446\u0435\u043d\u0438\u0432\u0430\u0442\u044c \u0440\u044b\u043d\u043e\u043a, "
+            "\u043d\u0430\u0445\u043e\u0434\u0438\u0442\u044c \u0442\u043e\u0440\u0433\u043e\u0432\u044b\u0435 \u0441\u0438\u0442\u0443\u0430\u0446\u0438\u0438 \u0438 \u0434\u0435\u0439\u0441\u0442\u0432\u043e\u0432\u0430\u0442\u044c \u0431\u043e\u043b\u0435\u0435 \u0441\u0438\u0441\u0442\u0435\u043c\u043d\u043e.</blockquote>\n\n"
+            "<b>\u0412\u0430\u0436\u043d\u043e \u043f\u043e\u043d\u0438\u043c\u0430\u0442\u044c \u0433\u043b\u0430\u0432\u043d\u043e\u0435:</b>\n\n"
+            "\U0001f4b0 <i>\u044d\u0442\u043e \u043d\u0435 \u00ab\u043a\u043d\u043e\u043f\u043a\u0430 \u0431\u0430\u0431\u043b\u043e\u00bb</i>\n\n"
+            "\u26cf <i>\u044d\u0442\u043e \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442, \u0441 \u043a\u043e\u0442\u043e\u0440\u044b\u043c \u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0434\u043e\u043b\u0436\u0435\u043d \u0442\u044b</i>\n\n"
+            "\U0001f4b9 <i>\u0442\u0440\u0435\u0439\u0434\u0438\u043d\u0433 \u2014 \u043d\u0435 \u0431\u044b\u0441\u0442\u0440\u044b\u0439 \u043f\u0440\u0438\u0437, \u0430 \u043f\u0443\u0442\u044c, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 "
+            "\u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u0438 \u043f\u0440\u0430\u043a\u0442\u0438\u043a\u0438.</i>\n\n"
+            "\u041c\u044b \u043d\u0435 \u043e\u0431\u0435\u0449\u0430\u0435\u043c \u043b\u0451\u0433\u043a\u0438\u0445 \u0434\u0435\u043d\u0435\u0433. \u041c\u044b \u0434\u0430\u0451\u043c <b>\u0440\u0430\u0431\u043e\u0447\u0443\u044e \u0441\u0440\u0435\u0434\u0443, "
+            "\u0442\u043e\u0440\u0433\u043e\u0432\u043e\u0433\u043e \u0431\u043e\u0442\u0430, \u043f\u043e\u0434\u0440\u043e\u0431\u043d\u044b\u0435 \u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u0438 \u0438 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0443</b>, \u0447\u0442\u043e\u0431\u044b "
+            "\u0442\u0435\u0431\u0435 \u043d\u0435 \u043f\u0440\u0438\u0448\u043b\u043e\u0441\u044c \u043f\u0440\u043e\u0445\u043e\u0434\u0438\u0442\u044c \u044d\u0442\u043e\u0442 \u043f\u0443\u0442\u044c \u0432 \u043e\u0434\u0438\u043d\u043e\u0447\u043a\u0443.\n\n"
+            "<b><i>\u0413\u043e\u0442\u043e\u0432 \u0440\u0430\u0437\u043e\u0431\u0440\u0430\u0442\u044c\u0441\u044f \u0432 \u0441\u0438\u0441\u0442\u0435\u043c\u0435 \u0438 \u043d\u0430\u0447\u0430\u0442\u044c \u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0432\u043c\u0435\u0441\u0442\u0435 \u0441 \u043d\u0430\u043c\u0438?</i></b>"
+        ),
+        "en": (
+            "<b><i>Hi</i></b> \U0001f44b\n\n"
+            "<i>There is no button in trading that you press once and it starts earning for you.</i>\n\n"
+            "<blockquote>\U0001f680 <b>Paradox Bot</b> combines algorithmic analysis and <b>30+ indicators</b> to help you read the market faster and act more systematically.</blockquote>\n\n"
+            "<b>The key point:</b>\n\n"
+            "\U0001f4b0 <i>it is not a money button</i>\n\n"
+            "\u26cf <i>it is a tool you need to work with</i>\n\n"
+            "\U0001f4b9 <i>trading is not a quick prize, it requires discipline and practice.</i>\n\n"
+            "<b><i>Ready to understand the system and start working with us?</i></b>"
+        ),
+    },
+    "TEAM-01": {
+        "ru": "<b>\U0001f525 \u0422\u044b \u0432\u044b\u0431\u0440\u0430\u043b \u0432\u0435\u0442\u043a\u0443 \u043a\u043e\u043c\u0430\u043d\u0434\u044b</b>\n\n\u041d\u0430\u0436\u043c\u0438 \u043a\u043d\u043e\u043f\u043a\u0443 \u043d\u0438\u0436\u0435, \u0447\u0442\u043e\u0431\u044b \u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c.",
+        "en": "<b>\U0001f525 You selected the team route</b>\n\nTap the button below to continue.",
+    },
+    "BOT-STEP-01": {
+        "ru": "<b>\U0001f511 \u0428\u0430\u0433 1</b>\n\n\u041e\u0442\u043a\u0440\u043e\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u043f\u043e \u043d\u0430\u0448\u0435\u0439 \u0441\u0441\u044b\u043b\u043a\u0435, \u0437\u0430\u0442\u0435\u043c \u043e\u0442\u043f\u0440\u0430\u0432\u044c Trader ID \u0447\u0438\u0441\u043b\u043e\u043c \u043e\u0442 6 \u0446\u0438\u0444\u0440.",
+        "en": "<b>\U0001f511 Step 1</b>\n\nOpen an account through our link, then send your Trader ID as a number of 6+ digits.",
+    },
+    "TEAM-STEP-01": {
+        "ru": "<b>\U0001f465 \u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u043a\u043e\u043c\u0430\u043d\u0434\u0435</b>\n\n\u041e\u0442\u043a\u0440\u043e\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u043f\u043e \u043d\u0430\u0448\u0435\u0439 \u0441\u0441\u044b\u043b\u043a\u0435 \u0438 \u043f\u0440\u0438\u0448\u043b\u0438 Trader ID.",
+        "en": "<b>\U0001f465 Team connection</b>\n\nOpen an account through our link and send your Trader ID.",
+    },
+    "BOT-EXISTING-ACCOUNT": {
+        "ru": "\u0415\u0441\u043b\u0438 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u0443\u0436\u0435 \u0435\u0441\u0442\u044c, \u043f\u0440\u0438\u0448\u043b\u0438 Trader ID. \u041f\u0440\u0438\u043c\u0435\u0440: <code>ID123456</code>",
+        "en": "If you already have an account, send your Trader ID. Example: <code>ID123456</code>",
+    },
+    "ID-FORMAT": {
+        "ru": "\u041f\u0440\u0438\u0448\u043b\u0438 Trader ID \u0432 \u0444\u043e\u0440\u043c\u0430\u0442\u0435 <code>123456</code> \u0438\u043b\u0438 <code>ID123456</code>.",
+        "en": "Send Trader ID as <code>123456</code> or <code>ID123456</code>.",
+    },
+    "ID-NOT-FOUND": {
+        "ru": "<b>\u0410\u043a\u043a\u0430\u0443\u043d\u0442 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u043f\u043e \u043d\u0430\u0448\u0435\u0439 \u0441\u0441\u044b\u043b\u043a\u0435</b>\n\n\u041e\u0442\u043a\u0440\u043e\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u043f\u043e \u043e\u0434\u043d\u043e\u0439 \u0438\u0437 \u043a\u043d\u043e\u043f\u043e\u043a \u043d\u0438\u0436\u0435 \u0438 \u043f\u0440\u0438\u0448\u043b\u0438 ID \u0435\u0449\u0451 \u0440\u0430\u0437.",
+        "en": "<b>Account was not found through our link</b>\n\nOpen an account using one of the buttons below and send your ID again.",
+    },
+    "TOPUP-01": {
+        "ru": "<b>\u2705 \u0410\u043a\u043a\u0430\u0443\u043d\u0442 \u043d\u0430\u0439\u0434\u0435\u043d</b>\n\n\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0439 \u0448\u0430\u0433 \u2014 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043f\u043e\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f.",
+        "en": "<b>\u2705 Account found</b>\n\nNext step: deposit verification.",
+    },
+    "TOPUP-LOW": {
+        "ru": "\u041f\u043e\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u0435 \u043d\u0438\u0436\u0435 \u043d\u0443\u0436\u043d\u043e\u0433\u043e \u0443\u0441\u043b\u043e\u0432\u0438\u044f.",
+        "en": "Deposit is below the required condition.",
+    },
+    "TOPUP-NOT-FOUND": {
+        "ru": "\u041f\u043e\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u0435 \u043f\u043e\u043a\u0430 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e.",
+        "en": "Deposit was not found yet.",
+    },
+    "BOT-SUCCESS": {
+        "ru": "<b>\U0001f916 \u0414\u043e\u0441\u0442\u0443\u043f \u043a Paradox Bot \u043e\u0442\u043a\u0440\u044b\u0442</b>",
+        "en": "<b>\U0001f916 Paradox Bot access is open</b>",
+    },
+    "TEAM-SUCCESS": {
+        "ru": "<b>\U0001f465 \u0414\u043e\u0441\u0442\u0443\u043f \u043a \u043a\u043e\u043c\u0430\u043d\u0434\u0435 \u043e\u0442\u043a\u0440\u044b\u0442</b>",
+        "en": "<b>\U0001f465 Team access is open</b>",
+    },
+    "REMINDER-03": {
+        "ru": "\u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435: \u0442\u044b \u043c\u043e\u0436\u0435\u0448\u044c \u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435.",
+        "en": "Reminder: you can continue the connection.",
     },
 }
 LEGACY_TEXT_FORMAT_TEXTS = {
@@ -278,16 +344,6 @@ def ensure_telegram_configured() -> None:
         raise HTTPException(status_code=503, detail="Telegram bot is not configured")
 
 
-def ensure_bot_ref_links_configured() -> None:
-    if not settings.pocket_option_ref_ru_url or not settings.pocket_option_ref_ww_url:
-        raise HTTPException(status_code=503, detail="Pocket Option referral links are not configured")
-
-
-def ensure_source_channel_configured() -> None:
-    if not settings.telegram_source_channel_id:
-        raise HTTPException(status_code=503, detail="Telegram source channel ID is not configured")
-
-
 def telegram_api_url(method: str) -> str:
     return f"https://api.telegram.org/bot{settings.telegram_bot_token}/{method}"
 
@@ -348,16 +404,16 @@ def funnel_texts(language: str) -> dict[str, str]:
     return FUNNEL_BUTTON_TEXTS.get(normalize_funnel_language(language), FUNNEL_BUTTON_TEXTS["en"])
 
 
-def funnel_ref_keyboard(language: str, *, include_existing_account: bool = True) -> dict[str, Any]:
-    ensure_bot_ref_links_configured()
+def funnel_ref_keyboard(language: str, *, include_existing_account: bool = True) -> dict[str, Any] | None:
     texts = funnel_texts(language)
-    keyboard = [
-        [{"text": texts["ref_ru"], "url": settings.pocket_option_ref_ru_url}],
-        [{"text": texts["ref_world"], "url": settings.pocket_option_ref_ww_url}],
-    ]
+    keyboard = []
+    if settings.pocket_option_ref_ru_url:
+        keyboard.append([{"text": texts["ref_ru"], "url": settings.pocket_option_ref_ru_url}])
+    if settings.pocket_option_ref_ww_url:
+        keyboard.append([{"text": texts["ref_world"], "url": settings.pocket_option_ref_ww_url}])
     if include_existing_account:
         keyboard.append([{"text": texts["existing_account"], "callback_data": "funnel:existing_account"}])
-    return {"inline_keyboard": keyboard}
+    return {"inline_keyboard": keyboard} if keyboard else None
 
 
 def funnel_node_keyboard(node_code: str, language: str) -> dict[str, Any] | None:
@@ -393,21 +449,29 @@ def funnel_node_keyboard(node_code: str, language: str) -> dict[str, Any] | None
     return None
 
 
-def copy_funnel_node(client: httpx.Client, chat_id: int, node_code: str, language: str) -> None:
-    ensure_source_channel_configured()
-    message_id = FUNNEL_NODE_MESSAGES[node_code]
+def copy_funnel_node(
+    client: httpx.Client,
+    chat_id: int,
+    node_code: str,
+    language: str,
+) -> None:
+    text_by_language = FUNNEL_NODE_TEXTS.get(node_code)
+    if text_by_language is None:
+        raise HTTPException(status_code=500, detail=f"Funnel node text is not configured: {node_code}")
+
+    text = text_by_language.get(normalize_funnel_language(language), text_by_language["en"])
     payload: dict[str, Any] = {
         "chat_id": chat_id,
-        "from_chat_id": settings.telegram_source_channel_id,
-        "message_id": message_id,
+        "text": text,
+        "parse_mode": "HTML",
     }
     reply_markup = funnel_node_keyboard(node_code, language)
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup
 
-    response = client.post(telegram_api_url("copyMessage"), json=payload)
+    response = client.post(telegram_api_url("sendMessage"), json=payload)
     response.raise_for_status()
-    print(f"telegram_copy_node node={node_code} source_message_id={message_id} chat_id={chat_id}")
+    print(f"telegram_send_node node={node_code} chat_id={chat_id}")
 
 
 def get_saved_language(db: Session, user: dict[str, Any]) -> str | None:
@@ -445,6 +509,57 @@ def send_html_message(client: httpx.Client, chat_id: int, text: str) -> None:
             "parse_mode": "HTML",
         },
     ).raise_for_status()
+
+
+def telegram_error_detail(error: Exception) -> str:
+    if isinstance(error, httpx.HTTPStatusError):
+        return error.response.text
+    if isinstance(error, HTTPException):
+        return str(error.detail)
+    return repr(error)
+
+
+def send_funnel_delivery_error(client: httpx.Client, chat_id: int, node_code: str, error: Exception) -> None:
+    detail = telegram_error_detail(error)
+    print(f"telegram_send_node_failed node={node_code} detail={detail}")
+    send_html_message(
+        client,
+        chat_id,
+        (
+            "\u26a0\ufe0f <b>\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0443\u0437\u0435\u043b "
+            f"{escape(node_code)}</b>\n\n"
+            "\u041f\u0440\u043e\u0432\u0435\u0440\u044c:\n"
+            "\u2022 TELEGRAM_BOT_TOKEN\n"
+            "\u2022 TELEGRAM_WEBAPP_URL\n"
+            "\u2022 \u0432\u0430\u043b\u0438\u0434\u043d\u043e\u0441\u0442\u044c inline-\u043a\u043d\u043e\u043f\u043e\u043a \u0438 URL \u0432 env\n\n"
+            f"<code>{escape(detail[:700])}</code>"
+        ),
+    )
+
+
+def log_telegram_media_ids(message: dict[str, Any]) -> None:
+    sticker = message.get("sticker")
+    if isinstance(sticker, dict):
+        print(
+            "telegram_sticker "
+            f"emoji={sticker.get('emoji')} "
+            f"file_id={sticker.get('file_id')} "
+            f"custom_emoji_id={sticker.get('custom_emoji_id')}"
+        )
+
+    entities = []
+    for key in ("entities", "caption_entities"):
+        value = message.get(key)
+        if isinstance(value, list):
+            entities.extend(value)
+
+    custom_emoji_ids = [
+        entity.get("custom_emoji_id")
+        for entity in entities
+        if isinstance(entity, dict) and entity.get("type") == "custom_emoji" and entity.get("custom_emoji_id")
+    ]
+    if custom_emoji_ids:
+        print(f"telegram_custom_emoji_ids={custom_emoji_ids}")
 
 
 def is_funnel_user_allowed(user: dict[str, Any]) -> bool:
@@ -823,6 +938,7 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
         return {"ok": True}
 
     message = update.get("message") or {}
+    log_telegram_media_ids(message)
     text = message.get("text")
     chat = message.get("chat") or {}
     user = message.get("from") or {}
@@ -870,7 +986,10 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
 
     node_code = "TEAM-01" if funnel_route == "TEAM" else "BOT-01"
     with httpx.Client(timeout=10) as client:
-        copy_funnel_node(client=client, chat_id=chat_id, node_code=node_code, language=language)
+        try:
+            copy_funnel_node(client=client, chat_id=chat_id, node_code=node_code, language=language)
+        except Exception as error:
+            send_funnel_delivery_error(client, chat_id, node_code, error)
 
     return {"ok": True}
 
@@ -923,14 +1042,18 @@ def handle_callback_query(callback_query: dict[str, Any], db: Session) -> None:
     with httpx.Client(timeout=10) as client:
         callback_text = funnel_texts(language)["callback_ok"]
         if data and data.startswith("funnel:") and chat_id is not None:
-            callback_text = handle_funnel_callback(
-                db=db,
-                user=user,
-                chat_id=chat_id,
-                data=data,
-                language=language,
-                client=client,
-            )
+            try:
+                callback_text = handle_funnel_callback(
+                    db=db,
+                    user=user,
+                    chat_id=chat_id,
+                    data=data,
+                    language=language,
+                    client=client,
+                )
+            except Exception as error:
+                callback_text = "\u041e\u0448\u0438\u0431\u043a\u0430 \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0438"
+                send_funnel_delivery_error(client, chat_id, data.removeprefix("funnel:"), error)
         elif data == "text_format":
             callback_text = LEGACY_TEXT_FORMAT_TEXTS.get(language, LEGACY_TEXT_FORMAT_TEXTS["en"])["selected"]
 

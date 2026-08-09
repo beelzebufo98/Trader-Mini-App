@@ -28,7 +28,7 @@ TELEGRAM_BOT_TOKEN=<token from BotFather>
 TELEGRAM_WEBAPP_URL=http://localhost:5173
 TELEGRAM_FUNNEL_ENABLED=false
 TELEGRAM_FUNNEL_ALLOWED_USER_IDS=<comma-separated Telegram user ids>
-TELEGRAM_SOURCE_CHANNEL_ID=<private channel id, e.g. -100...>
+TELEGRAM_SOURCE_CHANNEL_ID=<private channel id, optional for future source-channel sends>
 TEAM_VIP_URL=<private VIP team invite link>
 ```
 
