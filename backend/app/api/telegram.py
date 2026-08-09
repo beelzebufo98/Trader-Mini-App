@@ -82,6 +82,21 @@ FUNNEL_BUTTON_TEXTS = {
         "topup_pending": "Deposit verification will be connected in the next step.",
     },
 }
+LEGACY_TEXT_FORMAT_TEXTS = {
+    "ru": {
+        "selected": "\u0422\u0435\u043a\u0441\u0442\u043e\u0432\u044b\u0439 \u0444\u043e\u0440\u043c\u0430\u0442",
+        "message": (
+            "\u0422\u0435\u043a\u0441\u0442\u043e\u0432\u044b\u0439 \u0444\u043e\u0440\u043c\u0430\u0442 \u043f\u043e\u043a\u0430 \u043d\u0435 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0451\u043d.\n\n"
+            "\u0414\u043b\u044f \u0442\u0435\u0441\u0442\u0430 \u043d\u043e\u0432\u043e\u0439 \u0432\u043e\u0440\u043e\u043d\u043a\u0438 \u0438 Mini App \u043e\u0442\u043a\u0440\u043e\u0439 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u0435."
+        ),
+        "open_mini_app": "\u26a1 \u041e\u0442\u043a\u0440\u044b\u0442\u044c Mini App",
+    },
+    "en": {
+        "selected": "Text format",
+        "message": "Text format is not connected yet.\n\nOpen the Mini App to test the new funnel.",
+        "open_mini_app": "\u26a1 Open Mini App",
+    },
+}
 TRADER_ID_RE = re.compile(r"^\s*(?:id\s*)?(\d{6,})\s*$", re.IGNORECASE)
 SIGNAL_REQUEST_RE = re.compile(
     r"^\s*(?:(?:/signal|signal|СЃРёРіРЅР°Р»)\s+)?([a-z]{3}/?[a-z]{3}(?:\s+otc)?|[a-z]{6}(?:\s+otc)?)\s+(\d{1,2})\s*(?:m|min|РјРёРЅ|Рј)?\s*$",
@@ -295,8 +310,11 @@ def parse_start_context(text: str | None) -> tuple[str, str | None] | None:
         return None
 
     parts = text.strip().split(maxsplit=1)
-    if not parts or not parts[0].startswith("/start") or len(parts) < 2:
+    if not parts or not parts[0].startswith("/start"):
         return None
+
+    if len(parts) < 2:
+        return "BOT", None
 
     payload = parts[1].strip().lower()
     return START_DEEP_LINKS.get(payload)
@@ -897,14 +915,13 @@ def handle_callback_query(callback_query: dict[str, Any], db: Session) -> None:
     chat_id = chat.get("id")
     saved_language = get_saved_language(db, user)
     language = normalize_funnel_language(saved_language or user.get("language_code"))
-    text = BOT_TEXTS.get(language, BOT_TEXTS["en"])
     print(
         f"telegram_callback data={data} language_code={user.get('language_code')} "
         f"saved_language={saved_language} normalized_language={language}"
     )
 
     with httpx.Client(timeout=10) as client:
-        callback_text = text["text_selected"]
+        callback_text = funnel_texts(language)["callback_ok"]
         if data and data.startswith("funnel:") and chat_id is not None:
             callback_text = handle_funnel_callback(
                 db=db,
@@ -914,6 +931,8 @@ def handle_callback_query(callback_query: dict[str, Any], db: Session) -> None:
                 language=language,
                 client=client,
             )
+        elif data == "text_format":
+            callback_text = LEGACY_TEXT_FORMAT_TEXTS.get(language, LEGACY_TEXT_FORMAT_TEXTS["en"])["selected"]
 
         if callback_id:
             client.post(
@@ -927,15 +946,16 @@ def handle_callback_query(callback_query: dict[str, Any], db: Session) -> None:
         if data != "text_format" or chat_id is None:
             return
 
+        legacy_text = LEGACY_TEXT_FORMAT_TEXTS.get(language, LEGACY_TEXT_FORMAT_TEXTS["en"])
         client.post(
             telegram_api_url("sendMessage"),
             json={
                 "chat_id": chat_id,
-                "text": text["text_selected_message"],
+                "text": legacy_text["message"],
                 "parse_mode": "HTML",
                 "reply_markup": {
                     "inline_keyboard": [
-                        [{"text": text["open_mini_app"], "web_app": {"url": settings.telegram_webapp_url}}]
+                        [{"text": legacy_text["open_mini_app"], "web_app": {"url": settings.telegram_webapp_url}}]
                     ]
                 },
             },
