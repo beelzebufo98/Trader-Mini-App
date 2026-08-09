@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     telegram_webapp_url: str = ""
     telegram_funnel_enabled: bool = False
     telegram_funnel_allowed_user_ids: str = ""
+    telegram_funnel_test_mode_enabled: bool = False
+    telegram_funnel_test_access_code: str = ""
     telegram_source_channel_id: str = ""
     team_vip_url: str = ""
     pocket_option_partner_id: str = ""

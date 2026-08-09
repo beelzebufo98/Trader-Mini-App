@@ -1,5 +1,6 @@
 ﻿import re
 from html import escape
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -28,6 +29,19 @@ router = APIRouter()
 
 SUPPORTED_LANGUAGES = {"ru", "en", "es", "pt", "tr", "ar"}
 FUNNEL_LANGUAGES = {"ru", "en"}
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+FUNNEL_NODE_PHOTOS = {
+    "BOT-01": PROJECT_ROOT / "images" / "bot-start.png",
+}
+PREMIUM_EMOJI = {
+    "wave": '<tg-emoji emoji-id="5321095945780209338">\U0001f44b</tg-emoji>',
+    "tool": '<tg-emoji emoji-id="5462921117423384478">\U0001f6e0</tg-emoji>',
+    "warning": '<tg-emoji emoji-id="5958289678837746828">\u26a0\ufe0f</tg-emoji>',
+    "rocket": '<tg-emoji emoji-id="5188481279963715781">\U0001f680</tg-emoji>',
+    "money": '<tg-emoji emoji-id="5417924076503062111">\U0001f4b0</tg-emoji>',
+    "pick": '<tg-emoji emoji-id="5197371802136892976">\u26cf\ufe0f</tg-emoji>',
+    "chart": '<tg-emoji emoji-id="5298614648138919107">\U0001f4c8</tg-emoji>',
+}
 START_DEEP_LINKS = {
     "want_bot": ("BOT", None),
     "want_team": ("TEAM", None),
@@ -69,19 +83,19 @@ FUNNEL_BUTTON_TEXTS = {
 FUNNEL_NODE_TEXTS = {
     "BOT-01": {
         "ru": (
-            "<b><i>\u041f\u0440\u0438\u0432\u0435\u0442</i></b> \U0001f44b\n\n"
+            f"<b><i>\u041f\u0440\u0438\u0432\u0435\u0442, {{name}}</i></b> {PREMIUM_EMOJI['wave']}\n\n"
             "<i>\u0423\u0432\u044b, \u0432 \u0442\u0440\u0435\u0439\u0434\u0438\u043d\u0433\u0435 \u043d\u0435 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u0435\u0442 \u043a\u043d\u043e\u043f\u043a\u0438, \u043a\u043e\u0442\u043e\u0440\u0430\u044f \u043d\u0430\u0436\u0438\u043c\u0430\u0435\u0442\u0441\u044f "
             "\u043e\u0434\u0438\u043d \u0440\u0430\u0437 \u0438 \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442 \u0437\u0430\u0440\u0430\u0431\u0430\u0442\u044b\u0432\u0430\u0442\u044c \u0432\u043c\u0435\u0441\u0442\u043e \u0442\u0435\u0431\u044f.</i>\n\n"
-            "\U0001f6e4 <i>\u0414\u0430\u0436\u0435 <b>\u0441\u0430\u043c\u044b\u0439 \u0441\u0438\u043b\u044c\u043d\u044b\u0439</b> \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442 \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u0442\u043e\u043b\u044c\u043a\u043e <b>\u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u043c</b>.</i>\n\n"
-            "\u2755 <b>\u041d\u041e!</b> \u041c\u044b \u0441\u043e\u0437\u0434\u0430\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 <u>\u043c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u043e \u043e\u0431\u043b\u0435\u0433\u0447\u0438\u0442 \u0442\u0432\u043e\u0439 \u043f\u0443\u0442\u044c</u> "
+            f"{PREMIUM_EMOJI['tool']} <i>\u0414\u0430\u0436\u0435 <b>\u0441\u0430\u043c\u044b\u0439 \u0441\u0438\u043b\u044c\u043d\u044b\u0439</b> \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442 \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u0442\u043e\u043b\u044c\u043a\u043e <b>\u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u043c</b>.</i>\n\n"
+            f"{PREMIUM_EMOJI['warning']} <b>\u041d\u041e!</b> \u041c\u044b \u0441\u043e\u0437\u0434\u0430\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 <u>\u043c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u043e \u043e\u0431\u043b\u0435\u0433\u0447\u0438\u0442 \u0442\u0432\u043e\u0439 \u043f\u0443\u0442\u044c</u> "
             "\u043d\u0430 \u043f\u0443\u0442\u0438 \u043a \u0431\u043e\u043b\u044c\u0448\u043e\u043c\u0443 \u0437\u0430\u0440\u0430\u0431\u043e\u0442\u043a\u0443 \u043d\u0430 \u0442\u0440\u0435\u0439\u0434\u0438\u043d\u0433\u0435.\n\n"
-            "<blockquote>\U0001f680 <b>Paradox Bot</b> \u043e\u0431\u044a\u0435\u0434\u0438\u043d\u044f\u0435\u0442 \u0430\u043b\u0433\u043e\u0440\u0438\u0442\u043c\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0430\u043d\u0430\u043b\u0438\u0437 \u0438 "
+            f"<blockquote>{PREMIUM_EMOJI['rocket']} <b>Paradox Bot</b> \u043e\u0431\u044a\u0435\u0434\u0438\u043d\u044f\u0435\u0442 \u0430\u043b\u0433\u043e\u0440\u0438\u0442\u043c\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0430\u043d\u0430\u043b\u0438\u0437 \u0438 "
             "<b>\u0431\u043e\u043b\u0435\u0435 30 \u0438\u043d\u0434\u0438\u043a\u0430\u0442\u043e\u0440\u043e\u0432</b>, \u0447\u0442\u043e\u0431\u044b \u043f\u043e\u043c\u043e\u0447\u044c \u0442\u0435\u0431\u0435 \u0431\u044b\u0441\u0442\u0440\u0435\u0435 \u043e\u0446\u0435\u043d\u0438\u0432\u0430\u0442\u044c \u0440\u044b\u043d\u043e\u043a, "
             "\u043d\u0430\u0445\u043e\u0434\u0438\u0442\u044c \u0442\u043e\u0440\u0433\u043e\u0432\u044b\u0435 \u0441\u0438\u0442\u0443\u0430\u0446\u0438\u0438 \u0438 \u0434\u0435\u0439\u0441\u0442\u0432\u043e\u0432\u0430\u0442\u044c \u0431\u043e\u043b\u0435\u0435 \u0441\u0438\u0441\u0442\u0435\u043c\u043d\u043e.</blockquote>\n\n"
             "<b>\u0412\u0430\u0436\u043d\u043e \u043f\u043e\u043d\u0438\u043c\u0430\u0442\u044c \u0433\u043b\u0430\u0432\u043d\u043e\u0435:</b>\n\n"
-            "\U0001f4b0 <i>\u044d\u0442\u043e \u043d\u0435 \u00ab\u043a\u043d\u043e\u043f\u043a\u0430 \u0431\u0430\u0431\u043b\u043e\u00bb</i>\n\n"
-            "\u26cf <i>\u044d\u0442\u043e \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442, \u0441 \u043a\u043e\u0442\u043e\u0440\u044b\u043c \u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0434\u043e\u043b\u0436\u0435\u043d \u0442\u044b</i>\n\n"
-            "\U0001f4b9 <i>\u0442\u0440\u0435\u0439\u0434\u0438\u043d\u0433 \u2014 \u043d\u0435 \u0431\u044b\u0441\u0442\u0440\u044b\u0439 \u043f\u0440\u0438\u0437, \u0430 \u043f\u0443\u0442\u044c, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 "
+            f"{PREMIUM_EMOJI['money']} <i>\u044d\u0442\u043e \u043d\u0435 \u00ab\u043a\u043d\u043e\u043f\u043a\u0430 \u0431\u0430\u0431\u043b\u043e\u00bb</i>\n\n"
+            f"{PREMIUM_EMOJI['pick']} <i>\u044d\u0442\u043e \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442, \u0441 \u043a\u043e\u0442\u043e\u0440\u044b\u043c \u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0434\u043e\u043b\u0436\u0435\u043d \u0442\u044b</i>\n\n"
+            f"{PREMIUM_EMOJI['chart']} <i>\u0442\u0440\u0435\u0439\u0434\u0438\u043d\u0433 \u2014 \u043d\u0435 \u0431\u044b\u0441\u0442\u0440\u044b\u0439 \u043f\u0440\u0438\u0437, \u0430 \u043f\u0443\u0442\u044c, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 \u0442\u0440\u0435\u0431\u0443\u0435\u0442 "
             "\u0434\u0438\u0441\u0446\u0438\u043f\u043b\u0438\u043d\u044b \u0438 \u043f\u0440\u0430\u043a\u0442\u0438\u043a\u0438.</i>\n\n"
             "\u041c\u044b \u043d\u0435 \u043e\u0431\u0435\u0449\u0430\u0435\u043c \u043b\u0451\u0433\u043a\u0438\u0445 \u0434\u0435\u043d\u0435\u0433. \u041c\u044b \u0434\u0430\u0451\u043c <b>\u0440\u0430\u0431\u043e\u0447\u0443\u044e \u0441\u0440\u0435\u0434\u0443, "
             "\u0442\u043e\u0440\u0433\u043e\u0432\u043e\u0433\u043e \u0431\u043e\u0442\u0430, \u043f\u043e\u0434\u0440\u043e\u0431\u043d\u044b\u0435 \u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u0438 \u0438 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0443</b>, \u0447\u0442\u043e\u0431\u044b "
@@ -89,7 +103,7 @@ FUNNEL_NODE_TEXTS = {
             "<b><i>\u0413\u043e\u0442\u043e\u0432 \u0440\u0430\u0437\u043e\u0431\u0440\u0430\u0442\u044c\u0441\u044f \u0432 \u0441\u0438\u0441\u0442\u0435\u043c\u0435 \u0438 \u043d\u0430\u0447\u0430\u0442\u044c \u0440\u0430\u0431\u043e\u0442\u0430\u0442\u044c \u0432\u043c\u0435\u0441\u0442\u0435 \u0441 \u043d\u0430\u043c\u0438?</i></b>"
         ),
         "en": (
-            "<b><i>Hi</i></b> \U0001f44b\n\n"
+            f"<b><i>Hi, {{name}}</i></b> {PREMIUM_EMOJI['wave']}\n\n"
             "<i>There is no button in trading that you press once and it starts earning for you.</i>\n\n"
             "<blockquote>\U0001f680 <b>Paradox Bot</b> combines algorithmic analysis and <b>30+ indicators</b> to help you read the market faster and act more systematically.</blockquote>\n\n"
             "<b>The key point:</b>\n\n"
@@ -361,6 +375,18 @@ def normalize_funnel_language(language_code: str | None) -> str:
     return language if language in FUNNEL_LANGUAGES else "en"
 
 
+def user_display_name(user: dict[str, Any] | None, language: str) -> str:
+    fallback = "\u0434\u0440\u0443\u0433" if normalize_funnel_language(language) == "ru" else "friend"
+    if not user:
+        return fallback
+
+    raw_name = user.get("first_name") or user.get("username")
+    if not raw_name:
+        return fallback
+
+    return escape(str(raw_name))
+
+
 def parse_start_context(text: str | None) -> tuple[str, str | None] | None:
     if not text:
         return None
@@ -402,6 +428,73 @@ def save_start_context(db: Session, user: dict[str, Any], language: str, funnel_
 
 def funnel_texts(language: str) -> dict[str, str]:
     return FUNNEL_BUTTON_TEXTS.get(normalize_funnel_language(language), FUNNEL_BUTTON_TEXTS["en"])
+
+
+def is_funnel_test_user(user: dict[str, Any]) -> bool:
+    return settings.telegram_funnel_test_mode_enabled and is_funnel_user_allowed(user)
+
+
+def has_funnel_access(db: Session, user: dict[str, Any]) -> bool:
+    telegram_id = user.get("id")
+    if telegram_id is None:
+        return False
+
+    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
+    return bool(settings_row and settings_row.funnel_access_granted)
+
+
+def grant_funnel_access(db: Session, user: dict[str, Any]) -> None:
+    telegram_id = user.get("id")
+    if telegram_id is None:
+        return
+
+    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
+    if settings_row is None:
+        settings_row = UserSettings(
+            telegram_id=telegram_id,
+            username=user.get("username"),
+            first_name=user.get("first_name"),
+            funnel_access_granted=True,
+        )
+        db.add(settings_row)
+    else:
+        settings_row.username = user.get("username")
+        settings_row.first_name = user.get("first_name")
+        settings_row.funnel_access_granted = True
+
+    db.commit()
+
+
+def should_show_mini_app_menu(db: Session, user: dict[str, Any]) -> bool:
+    return not is_funnel_test_user(user) or has_funnel_access(db, user)
+
+
+def is_test_access_code(text: str) -> bool:
+    access_code = settings.telegram_funnel_test_access_code.strip()
+    return bool(access_code) and text.strip().casefold() == access_code.casefold()
+
+
+def set_chat_mini_app_menu(client: httpx.Client, chat_id: int, language: str, *, enabled: bool) -> None:
+    menu_button: dict[str, Any]
+    if enabled:
+        menu_button = {
+            "type": "web_app",
+            "text": funnel_texts(language)["open_bot"],
+            "web_app": {"url": settings.telegram_webapp_url},
+        }
+    else:
+        menu_button = {"type": "commands"}
+
+    try:
+        client.post(
+            telegram_api_url("setChatMenuButton"),
+            json={
+                "chat_id": chat_id,
+                "menu_button": menu_button,
+            },
+        ).raise_for_status()
+    except Exception as error:
+        print(f"telegram_menu_button_update_failed chat_id={chat_id} enabled={enabled} detail={telegram_error_detail(error)}")
 
 
 def funnel_ref_keyboard(language: str, *, include_existing_account: bool = True) -> dict[str, Any] | None:
@@ -454,12 +547,23 @@ def copy_funnel_node(
     chat_id: int,
     node_code: str,
     language: str,
+    user: dict[str, Any] | None = None,
 ) -> None:
     text_by_language = FUNNEL_NODE_TEXTS.get(node_code)
     if text_by_language is None:
         raise HTTPException(status_code=500, detail=f"Funnel node text is not configured: {node_code}")
 
     text = text_by_language.get(normalize_funnel_language(language), text_by_language["en"])
+    text = text.replace("{\u0438\u043c\u044f}", "{name}").replace("{name}", user_display_name(user, language))
+    photo_path = FUNNEL_NODE_PHOTOS.get(node_code)
+    if photo_path is not None and photo_path.exists():
+        with photo_path.open("rb") as photo:
+            client.post(
+                telegram_api_url("sendPhoto"),
+                data={"chat_id": chat_id},
+                files={"photo": (photo_path.name, photo, "image/png")},
+            ).raise_for_status()
+
     payload: dict[str, Any] = {
         "chat_id": chat_id,
         "text": text,
@@ -560,6 +664,92 @@ def log_telegram_media_ids(message: dict[str, Any]) -> None:
     ]
     if custom_emoji_ids:
         print(f"telegram_custom_emoji_ids={custom_emoji_ids}")
+
+
+def utf16_slice(text: str, offset: int, length: int) -> str:
+    raw = text.encode("utf-16-le")
+    start = offset * 2
+    end = (offset + length) * 2
+    try:
+        return raw[start:end].decode("utf-16-le")
+    except UnicodeDecodeError:
+        return text[offset : offset + length]
+
+
+def custom_emoji_report(message: dict[str, Any]) -> str | None:
+    rows: list[tuple[str, str]] = []
+
+    for text_key, entities_key in (("text", "entities"), ("caption", "caption_entities")):
+        text = message.get(text_key)
+        entities = message.get(entities_key)
+        if not isinstance(text, str) or not isinstance(entities, list):
+            continue
+
+        for entity in entities:
+            if not isinstance(entity, dict) or entity.get("type") != "custom_emoji":
+                continue
+            custom_emoji_id = entity.get("custom_emoji_id")
+            offset = entity.get("offset")
+            length = entity.get("length")
+            if not custom_emoji_id or not isinstance(offset, int) or not isinstance(length, int):
+                continue
+
+            emoji = utf16_slice(text, offset, length) or "?"
+            rows.append((emoji, str(custom_emoji_id)))
+
+    sticker = message.get("sticker")
+    if isinstance(sticker, dict) and sticker.get("custom_emoji_id"):
+        rows.append((str(sticker.get("emoji") or "?"), str(sticker["custom_emoji_id"])))
+
+    if not rows:
+        return None
+
+    unique_rows = list(dict.fromkeys(rows))
+    all_ids = "\n".join(custom_emoji_id for _, custom_emoji_id in unique_rows)
+    lines = [
+        f"\u041e\u0431\u043d\u0430\u0440\u0443\u0436\u0435\u043d\u044b premium emoji: <b>{len(unique_rows)}</b>",
+        "",
+        "<b>\u0412\u0441\u0435 custom_emoji_id:</b>",
+        f"<code>{escape(all_ids)}</code>",
+    ]
+
+    for index, (emoji, custom_emoji_id) in enumerate(unique_rows, start=1):
+        html = f'<tg-emoji emoji-id="{custom_emoji_id}">{emoji}</tg-emoji>'
+        markdown = f"![{emoji}](tg://emoji?id={custom_emoji_id})"
+        lines.extend(
+            [
+                "",
+                f"<b>{index}. {escape(emoji)}</b>",
+                f"custom_emoji_id: <code>{escape(custom_emoji_id)}</code>",
+                "HTML:",
+                f"<code>{escape(html)}</code>",
+                "Markdown:",
+                f"<code>{escape(markdown)}</code>",
+            ]
+        )
+
+    return "\n".join(lines)
+
+
+def handle_custom_emoji_id_message(client: httpx.Client, chat_id: int, message: dict[str, Any]) -> bool:
+    command_text = message.get("text") or message.get("caption") or ""
+    if not isinstance(command_text, str) or not command_text.strip().lower().startswith(("/emoji_ids", "/emoji")):
+        return False
+
+    report = custom_emoji_report(message)
+    if report is None:
+        return False
+
+    client.post(
+        telegram_api_url("sendMessage"),
+        json={
+            "chat_id": chat_id,
+            "text": report,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        },
+    ).raise_for_status()
+    return True
 
 
 def is_funnel_user_allowed(user: dict[str, Any]) -> bool:
@@ -829,6 +1019,23 @@ def handle_signal_request_message(db: Session, user: dict[str, Any], chat_id: in
         return True
 
 
+def handle_test_access_code_message(db: Session, user: dict[str, Any], chat_id: int, text: str) -> bool:
+    if not is_funnel_test_user(user) or not is_test_access_code(text):
+        return False
+
+    funnel_route, language = get_saved_context(db, user)
+    language = normalize_funnel_language(language or user.get("language_code"))
+    funnel_route = funnel_route or "BOT"
+    save_start_context(db, user, language, funnel_route)
+    grant_funnel_access(db, user)
+
+    node_code = "TEAM-SUCCESS" if funnel_route == "TEAM" else "BOT-SUCCESS"
+    with httpx.Client(timeout=10) as client:
+        set_chat_mini_app_menu(client, chat_id, language, enabled=True)
+        copy_funnel_node(client=client, chat_id=chat_id, node_code=node_code, language=language, user=user)
+    return True
+
+
 def handle_pairs_request_message(db: Session, user: dict[str, Any], chat_id: int, text: str) -> bool:
     pairs_request = parse_pairs_request(text)
     if pairs_request is None:
@@ -895,7 +1102,7 @@ def handle_trader_id_message(db: Session, user: dict[str, Any], chat_id: int, te
             get_user_info(trader_id)
         except PocketOptionApiError as error:
             if error.status_code == 404:
-                copy_funnel_node(client, chat_id, "ID-NOT-FOUND", language)
+                copy_funnel_node(client, chat_id, "ID-NOT-FOUND", language, user=user)
                 return True
 
             send_html_message(client, chat_id, texts["unavailable"])
@@ -904,7 +1111,7 @@ def handle_trader_id_message(db: Session, user: dict[str, Any], chat_id: int, te
             send_html_message(client, chat_id, texts["unavailable"])
             return True
 
-        copy_funnel_node(client, chat_id, "TOPUP-01", language)
+        copy_funnel_node(client, chat_id, "TOPUP-01", language, user=user)
         return True
 
 
@@ -918,7 +1125,7 @@ def handle_invalid_trader_id_message(db: Session, user: dict[str, Any], chat_id:
 
     language = normalize_funnel_language(language or user.get("language_code"))
     with httpx.Client(timeout=10) as client:
-        copy_funnel_node(client, chat_id, "ID-FORMAT", language)
+        copy_funnel_node(client, chat_id, "ID-FORMAT", language, user=user)
     return True
 
 
@@ -952,10 +1159,21 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
         return {"ok": True}
 
     if not is_funnel_user_allowed(user):
+        with httpx.Client(timeout=10) as client:
+            set_chat_mini_app_menu(client, chat_id, normalize_funnel_language(user.get("language_code")), enabled=True)
         print(f"telegram_funnel user_not_allowed telegram_id={user.get('id')}")
         return {"ok": True}
 
+    saved_route, saved_language = get_saved_context(db, user)
+    menu_language = normalize_funnel_language(saved_language or user.get("language_code"))
+    with httpx.Client(timeout=10) as client:
+        set_chat_mini_app_menu(client, chat_id, menu_language, enabled=should_show_mini_app_menu(db, user))
+        if handle_custom_emoji_id_message(client, chat_id, message):
+            return {"ok": True}
+
     if text and not text.startswith("/start"):
+        if handle_test_access_code_message(db=db, user=user, chat_id=chat_id, text=text):
+            return {"ok": True}
         if handle_trader_id_message(db=db, user=user, chat_id=chat_id, text=text):
             return {"ok": True}
         if handle_pairs_request_message(db=db, user=user, chat_id=chat_id, text=text):
@@ -985,9 +1203,11 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
     save_start_context(db, user, language, funnel_route)
 
     node_code = "TEAM-01" if funnel_route == "TEAM" else "BOT-01"
+
     with httpx.Client(timeout=10) as client:
+        set_chat_mini_app_menu(client, chat_id, language, enabled=should_show_mini_app_menu(db, user))
         try:
-            copy_funnel_node(client=client, chat_id=chat_id, node_code=node_code, language=language)
+            copy_funnel_node(client=client, chat_id=chat_id, node_code=node_code, language=language, user=user)
         except Exception as error:
             send_funnel_delivery_error(client, chat_id, node_code, error)
 
@@ -1007,16 +1227,18 @@ def handle_funnel_callback(
 
     if action == "bot_start":
         save_start_context(db, user, language, "BOT")
-        copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language)
+        set_chat_mini_app_menu(client, chat_id, language, enabled=should_show_mini_app_menu(db, user))
+        copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
         return texts["callback_ok"]
 
     if action == "team_start":
         save_start_context(db, user, language, "TEAM")
-        copy_funnel_node(client=client, chat_id=chat_id, node_code="TEAM-STEP-01", language=language)
+        set_chat_mini_app_menu(client, chat_id, language, enabled=should_show_mini_app_menu(db, user))
+        copy_funnel_node(client=client, chat_id=chat_id, node_code="TEAM-STEP-01", language=language, user=user)
         return texts["callback_ok"]
 
     if action == "existing_account":
-        copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-EXISTING-ACCOUNT", language=language)
+        copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-EXISTING-ACCOUNT", language=language, user=user)
         return texts["callback_ok"]
 
     if action == "check_topup":

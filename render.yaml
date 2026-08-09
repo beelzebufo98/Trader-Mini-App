@@ -24,6 +24,10 @@ services:
         value: "false"
       - key: TELEGRAM_FUNNEL_ALLOWED_USER_IDS
         sync: false
+      - key: TELEGRAM_FUNNEL_TEST_MODE_ENABLED
+        value: "false"
+      - key: TELEGRAM_FUNNEL_TEST_ACCESS_CODE
+        sync: false
       - key: TELEGRAM_SOURCE_CHANNEL_ID
         sync: false
       - key: TEAM_VIP_URL

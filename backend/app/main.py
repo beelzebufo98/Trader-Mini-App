@@ -54,3 +54,5 @@ def ensure_user_settings_columns() -> None:
             connection.execute(text("ALTER TABLE user_settings ADD COLUMN market VARCHAR(16) DEFAULT 'FOREX' NOT NULL"))
         if "funnel_route" not in columns:
             connection.execute(text("ALTER TABLE user_settings ADD COLUMN funnel_route VARCHAR(16) DEFAULT '' NOT NULL"))
+        if "funnel_access_granted" not in columns:
+            connection.execute(text("ALTER TABLE user_settings ADD COLUMN funnel_access_granted BOOLEAN DEFAULT FALSE NOT NULL"))

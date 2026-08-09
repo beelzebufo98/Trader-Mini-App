@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Column, DateTime, Integer, String
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, Integer, String
 
 from app.database import Base
 
@@ -19,5 +19,6 @@ class UserSettings(Base):
     language = Column(String(16), nullable=False, default="auto")
     market = Column(String(16), nullable=False, default="FOREX")
     funnel_route = Column(String(16), nullable=False, default="")
+    funnel_access_granted = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

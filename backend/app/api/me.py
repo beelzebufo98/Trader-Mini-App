@@ -21,6 +21,7 @@ def serialize_settings(settings: UserSettings) -> UserSettingsRead:
         language=settings.language,
         market=settings.market,
         funnel_route=settings.funnel_route,
+        funnel_access_granted=settings.funnel_access_granted,
         created_at=settings.created_at,
         updated_at=settings.updated_at,
     )
