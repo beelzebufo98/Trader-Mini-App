@@ -177,6 +177,26 @@ LEGACY_TEXT_FORMAT_TEXTS = {
         "open_mini_app": "\u26a1 Open Mini App",
     },
 }
+LEGACY_START_TEXTS = {
+    "ru": {
+        "message": (
+            "Привет! 👋\n\n"
+            "Профессиональные торговые сигналы для бинарных опционов и форекс рынка.\n\n"
+            "Выберите формат работы:"
+        ),
+        "mini_app": "⚡ Мини-апп (рекомендуется)",
+        "text_format": "💬 Текстовый формат",
+    },
+    "en": {
+        "message": (
+            "Hi! 👋\n\n"
+            "Professional trading signals for binary options and the forex market.\n\n"
+            "Choose how you want to work:"
+        ),
+        "mini_app": "⚡ Mini App (recommended)",
+        "text_format": "💬 Text format",
+    },
+}
 TRADER_ID_RE = re.compile(r"^\s*(?:id\s*)?(\d{6,})\s*$", re.IGNORECASE)
 SIGNAL_REQUEST_RE = re.compile(
     r"^\s*(?:(?:/signal|signal|СЃРёРіРЅР°Р»)\s+)?([a-z]{3}/?[a-z]{3}(?:\s+otc)?|[a-z]{6}(?:\s+otc)?)\s+(\d{1,2})\s*(?:m|min|РјРёРЅ|Рј)?\s*$",
@@ -611,6 +631,24 @@ def send_html_message(client: httpx.Client, chat_id: int, text: str) -> None:
             "chat_id": chat_id,
             "text": text,
             "parse_mode": "HTML",
+        },
+    ).raise_for_status()
+
+
+def send_legacy_start_message(client: httpx.Client, chat_id: int, language: str) -> None:
+    texts = LEGACY_START_TEXTS.get(normalize_funnel_language(language), LEGACY_START_TEXTS["en"])
+    client.post(
+        telegram_api_url("sendMessage"),
+        json={
+            "chat_id": chat_id,
+            "text": texts["message"],
+            "parse_mode": "HTML",
+            "reply_markup": {
+                "inline_keyboard": [
+                    [{"text": texts["mini_app"], "web_app": {"url": settings.telegram_webapp_url}}],
+                    [{"text": texts["text_format"], "callback_data": "text_format"}],
+                ]
+            },
         },
     ).raise_for_status()
 
@@ -1135,10 +1173,14 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
 
     callback_query = update.get("callback_query")
     if callback_query:
+        callback_data = callback_query.get("data")
+        if callback_data == "text_format":
+            handle_callback_query(callback_query, db)
+            return {"ok": True}
         if not settings.telegram_funnel_enabled:
             print("telegram_funnel disabled")
             return {"ok": True}
-        if not is_funnel_user_allowed(callback_query.get("from") or {}):
+        if callback_data and callback_data.startswith("funnel:") and not is_funnel_user_allowed(callback_query.get("from") or {}):
             print(f"telegram_funnel callback_user_not_allowed telegram_id={(callback_query.get('from') or {}).get('id')}")
             return {"ok": True}
         handle_callback_query(callback_query, db)
@@ -1155,13 +1197,22 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
         return {"ok": True}
 
     if not settings.telegram_funnel_enabled:
-        print("telegram_funnel disabled")
+        if text and text.startswith("/start"):
+            language = normalize_funnel_language(user.get("language_code"))
+            with httpx.Client(timeout=10) as client:
+                set_chat_mini_app_menu(client, chat_id, language, enabled=True)
+                send_legacy_start_message(client, chat_id, language)
+        else:
+            print("telegram_funnel disabled")
         return {"ok": True}
 
     if not is_funnel_user_allowed(user):
         with httpx.Client(timeout=10) as client:
-            set_chat_mini_app_menu(client, chat_id, normalize_funnel_language(user.get("language_code")), enabled=True)
-        print(f"telegram_funnel user_not_allowed telegram_id={user.get('id')}")
+            language = normalize_funnel_language(user.get("language_code"))
+            set_chat_mini_app_menu(client, chat_id, language, enabled=True)
+            if text and text.startswith("/start"):
+                send_legacy_start_message(client, chat_id, language)
+        print(f"telegram_funnel legacy_user telegram_id={user.get('id')}")
         return {"ok": True}
 
     saved_route, saved_language = get_saved_context(db, user)
