@@ -56,3 +56,9 @@ def ensure_user_settings_columns() -> None:
             connection.execute(text("ALTER TABLE user_settings ADD COLUMN funnel_route VARCHAR(16) DEFAULT '' NOT NULL"))
         if "funnel_access_granted" not in columns:
             connection.execute(text("ALTER TABLE user_settings ADD COLUMN funnel_access_granted BOOLEAN DEFAULT FALSE NOT NULL"))
+        if "funnel_reminder_stage" not in columns:
+            connection.execute(text("ALTER TABLE user_settings ADD COLUMN funnel_reminder_stage INTEGER DEFAULT 0 NOT NULL"))
+        if "funnel_reminder_token" not in columns:
+            connection.execute(text("ALTER TABLE user_settings ADD COLUMN funnel_reminder_token VARCHAR(64) DEFAULT '' NOT NULL"))
+        if "funnel_last_reminder_message_id" not in columns:
+            connection.execute(text("ALTER TABLE user_settings ADD COLUMN funnel_last_reminder_message_id INTEGER"))

@@ -1,5 +1,8 @@
 ﻿import re
 from html import escape
+import random
+import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.models.user_settings import UserSettings
 from app.services.devsbite import (
     DevsbiteApiError,
@@ -33,6 +36,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 FUNNEL_NODE_PHOTOS = {
     "BOT-01": PROJECT_ROOT / "images" / "bot-start.png",
 }
+BOT_REMINDER_SOURCE_MESSAGE_ID = 6
+BOT_REMINDER_DELAYS_SECONDS = (
+    (5 * 60, 15 * 60),
+    (30 * 60, 60 * 60),
+    (60 * 60, 120 * 60),
+    (60 * 60, 120 * 60),
+)
 PREMIUM_EMOJI = {
     "wave": '<tg-emoji emoji-id="5321095945780209338">\U0001f44b</tg-emoji>',
     "tool": '<tg-emoji emoji-id="5462921117423384478">\U0001f6e0</tg-emoji>',
@@ -57,6 +67,7 @@ START_DEEP_LINKS = {
 FUNNEL_BUTTON_TEXTS = {
     "ru": {
         "want_bot": "\U0001f525 \u0425\u041e\u0427\u0423 \u0411\u041e\u0422\u0410",
+        "get_bot": "\U0001f525 \u041f\u041e\u041b\u0423\u0427\u0418\u0422\u042c \u0411\u041e\u0422\u0410",
         "want_team": "\U0001f525 \u0425\u041e\u0427\u0423 \u0412 \u041a\u041e\u041c\u0410\u041d\u0414\u0423",
         "ref_ru": "\U0001f1f7\U0001f1fa \u041e\u0422\u041a\u0420\u042b\u0422\u042c \u0410\u041a\u041a\u0410\u0423\u041d\u0422 \u0414\u041b\u042f \u0420\u041e\u0421\u0421\u0418\u0418",
         "ref_world": "\U0001f30d \u041e\u0422\u041a\u0420\u042b\u0422\u042c \u0410\u041a\u041a\u0410\u0423\u041d\u0422 \u0414\u041b\u042f \u0414\u0420\u0423\u0413\u0418\u0425 \u0421\u0422\u0420\u0410\u041d",
@@ -69,6 +80,7 @@ FUNNEL_BUTTON_TEXTS = {
     },
     "en": {
         "want_bot": "\U0001f525 I WANT THE BOT",
+        "get_bot": "\U0001f525 GET THE BOT",
         "want_team": "\U0001f525 I WANT TO JOIN THE TEAM",
         "ref_ru": "\U0001f1f7\U0001f1fa OPEN ACCOUNT FOR RUSSIA",
         "ref_world": "\U0001f30d OPEN ACCOUNT FOR OTHER COUNTRIES",
@@ -86,9 +98,9 @@ FUNNEL_NODE_TEXTS = {
             f"<b><i>\u041f\u0440\u0438\u0432\u0435\u0442, {{name}}</i></b> {PREMIUM_EMOJI['wave']}\n\n"
             "<i>\u0423\u0432\u044b, \u0432 \u0442\u0440\u0435\u0439\u0434\u0438\u043d\u0433\u0435 \u043d\u0435 \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u0435\u0442 \u043a\u043d\u043e\u043f\u043a\u0438, \u043a\u043e\u0442\u043e\u0440\u0430\u044f \u043d\u0430\u0436\u0438\u043c\u0430\u0435\u0442\u0441\u044f "
             "\u043e\u0434\u0438\u043d \u0440\u0430\u0437 \u0438 \u043d\u0430\u0447\u0438\u043d\u0430\u0435\u0442 \u0437\u0430\u0440\u0430\u0431\u0430\u0442\u044b\u0432\u0430\u0442\u044c \u0432\u043c\u0435\u0441\u0442\u043e \u0442\u0435\u0431\u044f.</i>\n\n"
-            f"{PREMIUM_EMOJI['tool']} <i>\u0414\u0430\u0436\u0435 <b>\u0441\u0430\u043c\u044b\u0439 \u0441\u0438\u043b\u044c\u043d\u044b\u0439</b> \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442 \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u0442\u043e\u043b\u044c\u043a\u043e <b>\u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u043c</b>.</i>\n\n"
-            f"{PREMIUM_EMOJI['warning']} <b>\u041d\u041e!</b> \u041c\u044b \u0441\u043e\u0437\u0434\u0430\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 <u>\u043c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u043e \u043e\u0431\u043b\u0435\u0433\u0447\u0438\u0442 \u0442\u0432\u043e\u0439 \u043f\u0443\u0442\u044c</u> "
-            "\u043d\u0430 \u043f\u0443\u0442\u0438 \u043a \u0431\u043e\u043b\u044c\u0448\u043e\u043c\u0443 \u0437\u0430\u0440\u0430\u0431\u043e\u0442\u043a\u0443 \u043d\u0430 \u0442\u0440\u0435\u0439\u0434\u0438\u043d\u0433\u0435.\n\n"
+            f"<tg-spoiler>{PREMIUM_EMOJI['tool']} <i>\u0414\u0430\u0436\u0435 <b>\u0441\u0430\u043c\u044b\u0439 \u0441\u0438\u043b\u044c\u043d\u044b\u0439</b> \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442 \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u0442\u043e\u043b\u044c\u043a\u043e <b>\u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u043e\u043c</b>.</i></tg-spoiler>\n\n"
+            f"<tg-spoiler>{PREMIUM_EMOJI['warning']} <b>\u041d\u041e!</b> \u041c\u044b \u0441\u043e\u0437\u0434\u0430\u043b\u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442, \u043a\u043e\u0442\u043e\u0440\u044b\u0439 <u>\u043c\u0430\u043a\u0441\u0438\u043c\u0430\u043b\u044c\u043d\u043e \u043e\u0431\u043b\u0435\u0433\u0447\u0438\u0442 \u0442\u0432\u043e\u0439 \u043f\u0443\u0442\u044c</u> "
+            "\u043d\u0430 \u043f\u0443\u0442\u0438 \u043a \u0431\u043e\u043b\u044c\u0448\u043e\u043c\u0443 \u0437\u0430\u0440\u0430\u0431\u043e\u0442\u043a\u0443 \u043d\u0430 \u0442\u0440\u0435\u0439\u0434\u0438\u043d\u0433\u0435.</tg-spoiler>\n\n"
             f"<blockquote>{PREMIUM_EMOJI['rocket']} <b>Paradox Bot</b> \u043e\u0431\u044a\u0435\u0434\u0438\u043d\u044f\u0435\u0442 \u0430\u043b\u0433\u043e\u0440\u0438\u0442\u043c\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0430\u043d\u0430\u043b\u0438\u0437 \u0438 "
             "<b>\u0431\u043e\u043b\u0435\u0435 30 \u0438\u043d\u0434\u0438\u043a\u0430\u0442\u043e\u0440\u043e\u0432</b>, \u0447\u0442\u043e\u0431\u044b \u043f\u043e\u043c\u043e\u0447\u044c \u0442\u0435\u0431\u0435 \u0431\u044b\u0441\u0442\u0440\u0435\u0435 \u043e\u0446\u0435\u043d\u0438\u0432\u0430\u0442\u044c \u0440\u044b\u043d\u043e\u043a, "
             "\u043d\u0430\u0445\u043e\u0434\u0438\u0442\u044c \u0442\u043e\u0440\u0433\u043e\u0432\u044b\u0435 \u0441\u0438\u0442\u0443\u0430\u0446\u0438\u0438 \u0438 \u0434\u0435\u0439\u0441\u0442\u0432\u043e\u0432\u0430\u0442\u044c \u0431\u043e\u043b\u0435\u0435 \u0441\u0438\u0441\u0442\u0435\u043c\u043d\u043e.</blockquote>\n\n"
@@ -517,6 +529,144 @@ def set_chat_mini_app_menu(client: httpx.Client, chat_id: int, language: str, *,
         print(f"telegram_menu_button_update_failed chat_id={chat_id} enabled={enabled} detail={telegram_error_detail(error)}")
 
 
+def copy_source_message(
+    client: httpx.Client,
+    chat_id: int,
+    source_message_id: int,
+    language: str,
+    *,
+    reply_markup: dict[str, Any] | None = None,
+) -> int | None:
+    if not settings.telegram_source_channel_id:
+        print("telegram_source_copy skipped: TELEGRAM_SOURCE_CHANNEL_ID is empty")
+        return None
+
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "from_chat_id": settings.telegram_source_channel_id,
+        "message_id": source_message_id,
+    }
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+
+    response = client.post(telegram_api_url("copyMessage"), json=payload)
+    response.raise_for_status()
+    result = response.json().get("result") or {}
+    message_id = result.get("message_id")
+    print(f"telegram_copy_source source_message_id={source_message_id} chat_id={chat_id} copied_message_id={message_id}")
+    return message_id if isinstance(message_id, int) else None
+
+
+def delete_chat_message(client: httpx.Client, chat_id: int, message_id: int | None) -> None:
+    if message_id is None:
+        return
+
+    try:
+        client.post(
+            telegram_api_url("deleteMessage"),
+            json={"chat_id": chat_id, "message_id": message_id},
+        ).raise_for_status()
+    except Exception as error:
+        print(f"telegram_delete_message_failed chat_id={chat_id} message_id={message_id} detail={telegram_error_detail(error)}")
+
+
+def schedule_bot_reminder_timer(chat_id: int, telegram_id: int, token: str, language: str, stage: int) -> None:
+    if stage < 1 or stage > len(BOT_REMINDER_DELAYS_SECONDS):
+        return
+
+    delay_min, delay_max = BOT_REMINDER_DELAYS_SECONDS[stage - 1]
+    delay_seconds = random.randint(delay_min, delay_max)
+    timer = threading.Timer(delay_seconds, run_bot_reminder_stage, args=(chat_id, telegram_id, token, language, stage))
+    timer.daemon = True
+    timer.start()
+    print(
+        "telegram_bot_reminder_scheduled "
+        f"telegram_id={telegram_id} stage={stage} delay_seconds={delay_seconds}"
+    )
+
+
+def start_bot_reminder_flow(db: Session, user: dict[str, Any], chat_id: int, language: str) -> None:
+    telegram_id = user.get("id")
+    if not isinstance(telegram_id, int):
+        return
+
+    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
+    if settings_row is None:
+        return
+
+    token = uuid.uuid4().hex
+    settings_row.funnel_reminder_stage = 1
+    settings_row.funnel_reminder_token = token
+    settings_row.funnel_last_reminder_message_id = None
+    db.commit()
+
+    schedule_bot_reminder_timer(chat_id, telegram_id, token, language, stage=1)
+
+
+def cancel_bot_reminder_flow(db: Session, user: dict[str, Any], client: httpx.Client | None = None, chat_id: int | None = None) -> None:
+    telegram_id = user.get("id")
+    if not isinstance(telegram_id, int):
+        return
+
+    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
+    if settings_row is None:
+        return
+
+    last_message_id = settings_row.funnel_last_reminder_message_id
+    settings_row.funnel_reminder_stage = 0
+    settings_row.funnel_reminder_token = ""
+    settings_row.funnel_last_reminder_message_id = None
+    db.commit()
+
+    if client is not None and chat_id is not None:
+        delete_chat_message(client, chat_id, last_message_id)
+
+
+def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language: str, stage: int) -> None:
+    db = SessionLocal()
+    try:
+        settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
+        if settings_row is None:
+            return
+        if settings_row.funnel_reminder_token != token or settings_row.funnel_reminder_stage != stage:
+            return
+        if settings_row.funnel_access_granted:
+            cancel_bot_reminder_flow(db, {"id": telegram_id})
+            return
+
+        user = {
+            "id": telegram_id,
+            "username": settings_row.username,
+            "first_name": settings_row.first_name,
+        }
+        with httpx.Client(timeout=20) as client:
+            delete_chat_message(client, chat_id, settings_row.funnel_last_reminder_message_id)
+
+            if stage < len(BOT_REMINDER_DELAYS_SECONDS):
+                message_id = copy_source_message(
+                    client=client,
+                    chat_id=chat_id,
+                    source_message_id=BOT_REMINDER_SOURCE_MESSAGE_ID,
+                    language=language,
+                    reply_markup=bot_reminder_keyboard(language),
+                )
+                settings_row.funnel_last_reminder_message_id = message_id
+                settings_row.funnel_reminder_stage = stage + 1
+                db.commit()
+                schedule_bot_reminder_timer(chat_id, telegram_id, token, language, stage=stage + 1)
+                return
+
+            settings_row.funnel_reminder_stage = 0
+            settings_row.funnel_reminder_token = ""
+            settings_row.funnel_last_reminder_message_id = None
+            db.commit()
+            copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
+    except Exception as error:
+        print(f"telegram_bot_reminder_failed telegram_id={telegram_id} stage={stage} detail={telegram_error_detail(error)}")
+    finally:
+        db.close()
+
+
 def funnel_ref_keyboard(language: str, *, include_existing_account: bool = True) -> dict[str, Any] | None:
     texts = funnel_texts(language)
     keyboard = []
@@ -560,6 +710,11 @@ def funnel_node_keyboard(node_code: str, language: str) -> dict[str, Any] | None
         return {"inline_keyboard": [[{"text": texts["want_team"], "callback_data": "funnel:team_start"}]]}
 
     return None
+
+
+def bot_reminder_keyboard(language: str) -> dict[str, Any]:
+    texts = funnel_texts(language)
+    return {"inline_keyboard": [[{"text": texts["get_bot"], "callback_data": "funnel:bot_start"}]]}
 
 
 def copy_funnel_node(
@@ -1069,6 +1224,7 @@ def handle_test_access_code_message(db: Session, user: dict[str, Any], chat_id: 
 
     node_code = "TEAM-SUCCESS" if funnel_route == "TEAM" else "BOT-SUCCESS"
     with httpx.Client(timeout=10) as client:
+        cancel_bot_reminder_flow(db, user, client=client, chat_id=chat_id)
         set_chat_mini_app_menu(client, chat_id, language, enabled=True)
         copy_funnel_node(client=client, chat_id=chat_id, node_code=node_code, language=language, user=user)
     return True
@@ -1259,6 +1415,8 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
         set_chat_mini_app_menu(client, chat_id, language, enabled=should_show_mini_app_menu(db, user))
         try:
             copy_funnel_node(client=client, chat_id=chat_id, node_code=node_code, language=language, user=user)
+            if node_code == "BOT-01":
+                start_bot_reminder_flow(db, user, chat_id, language)
         except Exception as error:
             send_funnel_delivery_error(client, chat_id, node_code, error)
 
@@ -1278,12 +1436,14 @@ def handle_funnel_callback(
 
     if action == "bot_start":
         save_start_context(db, user, language, "BOT")
+        cancel_bot_reminder_flow(db, user, client=client, chat_id=chat_id)
         set_chat_mini_app_menu(client, chat_id, language, enabled=should_show_mini_app_menu(db, user))
         copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
         return texts["callback_ok"]
 
     if action == "team_start":
         save_start_context(db, user, language, "TEAM")
+        cancel_bot_reminder_flow(db, user, client=client, chat_id=chat_id)
         set_chat_mini_app_menu(client, chat_id, language, enabled=should_show_mini_app_menu(db, user))
         copy_funnel_node(client=client, chat_id=chat_id, node_code="TEAM-STEP-01", language=language, user=user)
         return texts["callback_ok"]

@@ -20,5 +20,8 @@ class UserSettings(Base):
     market = Column(String(16), nullable=False, default="FOREX")
     funnel_route = Column(String(16), nullable=False, default="")
     funnel_access_granted = Column(Boolean, nullable=False, default=False)
+    funnel_reminder_stage = Column(Integer, nullable=False, default=0)
+    funnel_reminder_token = Column(String(64), nullable=False, default="")
+    funnel_last_reminder_message_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
