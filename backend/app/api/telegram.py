@@ -1,7 +1,9 @@
 ﻿import re
 from html import escape
+from datetime import datetime, timedelta
 import random
 import threading
+import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -12,6 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import SessionLocal, get_db
+from app.models.funnel_session import FunnelSession
+from app.models.telegram_user import TelegramUser as TelegramUserModel
 from app.models.user_settings import UserSettings
 from app.services.devsbite import (
     DevsbiteApiError,
@@ -35,14 +39,38 @@ FUNNEL_LANGUAGES = {"ru", "en"}
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 FUNNEL_NODE_PHOTOS = {
     "BOT-01": PROJECT_ROOT / "images" / "bot-start.png",
+    "BOT-STEP-01": PROJECT_ROOT / "images" / "BOT-STEP-01.png",
 }
 BOT_REMINDER_SOURCE_MESSAGE_ID = 6
+BOT_INTRO_REMINDER_KIND = "BOT-01"
+BOT_STEP_REMINDER_KIND = "BOT-STEP-01"
 BOT_REMINDER_DELAYS_SECONDS = (
     (5 * 60, 15 * 60),
     (30 * 60, 60 * 60),
     (60 * 60, 120 * 60),
     (60 * 60, 120 * 60),
 )
+BOT_STEP_REMINDER_DELAYS_SECONDS = (
+    (30 * 60, 60 * 60),
+    (30 * 60, 60 * 60),
+    (30 * 60, 60 * 60),
+    (60 * 60, 120 * 60),
+    (60 * 60, 120 * 60),
+    (60 * 60, 120 * 60),
+    (120 * 60, 180 * 60),
+    (120 * 60, 180 * 60),
+    (120 * 60, 180 * 60),
+    (120 * 60, 180 * 60),
+)
+REMINDER_DELAYS_BY_KIND = {
+    BOT_INTRO_REMINDER_KIND: BOT_REMINDER_DELAYS_SECONDS,
+    BOT_STEP_REMINDER_KIND: BOT_STEP_REMINDER_DELAYS_SECONDS,
+}
+REMINDER_WORKER_POLL_SECONDS = 15
+REMINDER_WORKER_BATCH_SIZE = 20
+POCKET_ACCOUNT_CLOSE_INSTRUCTION_URL = "https://pocketoption.com/blog/en/interesting/trading-platforms/how-to-close-pocket-option-account/"
+_reminder_worker_lock = threading.Lock()
+_reminder_worker_started = False
 PREMIUM_EMOJI = {
     "wave": '<tg-emoji emoji-id="5321095945780209338">\U0001f44b</tg-emoji>',
     "tool": '<tg-emoji emoji-id="5462921117423384478">\U0001f6e0</tg-emoji>',
@@ -51,6 +79,28 @@ PREMIUM_EMOJI = {
     "money": '<tg-emoji emoji-id="5417924076503062111">\U0001f4b0</tg-emoji>',
     "pick": '<tg-emoji emoji-id="5197371802136892976">\u26cf\ufe0f</tg-emoji>',
     "chart": '<tg-emoji emoji-id="5298614648138919107">\U0001f4c8</tg-emoji>',
+    "step_rocket": '<tg-emoji emoji-id="5445284980978621387">\U0001f680</tg-emoji>',
+    "step_diamond": '<tg-emoji emoji-id="5427168083074628963">\U0001f48e</tg-emoji>',
+    "step_one_blue": '<tg-emoji emoji-id="6084545344924813749">1\ufe0f\u20e3</tg-emoji>',
+    "step_two_purple": '<tg-emoji emoji-id="6084472459329800521">2\ufe0f\u20e3</tg-emoji>',
+    "step_heart": '<tg-emoji emoji-id="5296278100030536646">\u2763\ufe0f</tg-emoji>',
+    "step_one_purple": '<tg-emoji emoji-id="5258124771668794894">1\ufe0f\u20e3</tg-emoji>',
+    "step_link": '<tg-emoji emoji-id="5235579174072112613">\U0001f517</tg-emoji>',
+    "step_ru": '<tg-emoji emoji-id="5449408995691341691">\U0001f1f7\U0001f1fa</tg-emoji>',
+    "step_world": '<tg-emoji emoji-id="5399898266265475100">\U0001f30d</tg-emoji>',
+    "step_tv": '<tg-emoji emoji-id="5100437323728815275">\U0001f4fa</tg-emoji>',
+    "step_bang": '<tg-emoji emoji-id="5440660757194744323">\u203c\ufe0f</tg-emoji>',
+    "step_key": '<tg-emoji emoji-id="5330115548900501467">\U0001f511</tg-emoji>',
+    "step_check": '<tg-emoji emoji-id="5206607081334906820">\u2714\ufe0f</tg-emoji>',
+    "step_done": '<tg-emoji emoji-id="5021905410089550576">\u2705</tg-emoji>',
+    "existing_bang": '<tg-emoji emoji-id="5467890025217661107">\u203c\ufe0f</tg-emoji>',
+    "existing_one": '<tg-emoji emoji-id="5258124771668794894">1\ufe0f\u20e3</tg-emoji>',
+    "existing_two": '<tg-emoji emoji-id="5258326935779418457">2\ufe0f\u20e3</tg-emoji>',
+    "existing_link": '<tg-emoji emoji-id="5235579174072112613">\U0001f517</tg-emoji>',
+    "existing_ru": '<tg-emoji emoji-id="5449408995691341691">\U0001f1f7\U0001f1fa</tg-emoji>',
+    "existing_world": '<tg-emoji emoji-id="5399898266265475100">\U0001f30d</tg-emoji>',
+    "existing_three": '<tg-emoji emoji-id="5255836533352572170">3\ufe0f\u20e3</tg-emoji>',
+    "existing_rocket": '<tg-emoji emoji-id="5445284980978621387">\U0001f680</tg-emoji>',
 }
 START_DEEP_LINKS = {
     "want_bot": ("BOT", None),
@@ -130,16 +180,107 @@ FUNNEL_NODE_TEXTS = {
         "en": "<b>\U0001f525 You selected the team route</b>\n\nTap the button below to continue.",
     },
     "BOT-STEP-01": {
-        "ru": "<b>\U0001f511 \u0428\u0430\u0433 1</b>\n\n\u041e\u0442\u043a\u0440\u043e\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u043f\u043e \u043d\u0430\u0448\u0435\u0439 \u0441\u0441\u044b\u043b\u043a\u0435, \u0437\u0430\u0442\u0435\u043c \u043e\u0442\u043f\u0440\u0430\u0432\u044c Trader ID \u0447\u0438\u0441\u043b\u043e\u043c \u043e\u0442 6 \u0446\u0438\u0444\u0440.",
-        "en": "<b>\U0001f511 Step 1</b>\n\nOpen an account through our link, then send your Trader ID as a number of 6+ digits.",
+        "ru": (
+            f"{PREMIUM_EMOJI['step_rocket']} <b>PARADOX BOT</b> — рабочий инструмент для тех, кто хочет "
+            "быстрее анализировать рынок, находить торговые ситуации и "
+            "<b>принимать решения по системе</b>, а не на эмоциях.\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_diamond']} <b>Внутри ты получишь два типа прогнозов:</b></blockquote>\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_one_blue']} <i>Алгоритмический прогноз по FOREX и OTC-активам.</i>\n\n"
+            f"{PREMIUM_EMOJI['step_two_purple']} <i>Торговую модель с направлением, активом, экспирацией "
+            "и параметрами входа.</i></blockquote>\n\n"
+            "Каждый прогноз собирается на основе рыночного контекста и "
+            "системы из <b>более чем 30 индикаторов.</b>\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_heart']} <b>Что будет доступно после подключения:</b></blockquote>\n"
+            "<blockquote>• аналитика рынка;\n"
+            "• готовые параметры торговой ситуации;\n"
+            "• торговая пара и направление;\n"
+            "• время экспирации;\n"
+            "• системный подход без ручного перебора десятков графиков.</blockquote>\n\n"
+            "Чтобы система смогла найти твой аккаунт и открыть доступ к боту, "
+            "регистрацию необходимо пройти по нашей ссылке.\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_one_purple']} <b>СОЗДАЙ АККАУНТ</b></blockquote>\n"
+            "<blockquote>Нажми кнопку регистрации ниже и заполни данные.</blockquote>\n"
+            "<blockquote>Это займёт около одной минуты.</blockquote>\n\n"
+            f"{PREMIUM_EMOJI['step_link']} <b>РЕГИСТРАЦИЯ:</b>\n\n"
+            f"{PREMIUM_EMOJI['step_ru']} ОТКРЫТЬ АККАУНТ ДЛЯ РОССИИ\n"
+            f"{PREMIUM_EMOJI['step_world']} ОТКРЫТЬ АККАУНТ ДЛЯ ДРУГИХ СТРАН\n\n"
+            f"{PREMIUM_EMOJI['step_bang']}{PREMIUM_EMOJI['step_bang']}{PREMIUM_EMOJI['step_bang']} <b>ВАЖНО</b>\n\n"
+            "Если у тебя уже есть аккаунт, нажимай на кнопку\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_key']} <b>У МЕНЯ УЖЕ ЕСТЬ АККАУНТ</b></blockquote>\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_check']}{PREMIUM_EMOJI['step_check']}{PREMIUM_EMOJI['step_check']} "
+            "<b>После регистрации:</b></blockquote>\n"
+            "<blockquote>Вернись в этот чат.\n\n"
+            "Отправь свой <b>Trader ID.</b></blockquote>\n\n"
+            "Дождись автоматической проверки.\n\n"
+            "После подтверждения регистрации тебе откроется следующий этап подключения к <b>Paradox Bot.</b>"
+        ),
+        "en": (
+            f"{PREMIUM_EMOJI['step_rocket']} <b>PARADOX BOT</b> is a working tool for anyone who wants to "
+            "analyze the market faster, find trading situations, and make decisions by system, not emotion.\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_diamond']} <b>Inside you get two forecast types:</b></blockquote>\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_one_blue']} <i>Algorithmic forecast for FOREX and OTC assets.</i>\n\n"
+            f"{PREMIUM_EMOJI['step_two_purple']} <i>A trading model with direction, asset, expiration, and entry parameters.</i></blockquote>\n\n"
+            "Each forecast is built from market context and a system of <b>30+ indicators.</b>\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_heart']} <b>After activation you will get:</b></blockquote>\n"
+            "<blockquote>• market analytics;\n"
+            "• prepared trading situation parameters;\n"
+            "• trading pair and direction;\n"
+            "• expiration time;\n"
+            "• a systematic approach without checking dozens of charts manually.</blockquote>\n\n"
+            "To let the system find your account and open bot access, registration must be completed through our link.\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_one_purple']} <b>CREATE ACCOUNT</b></blockquote>\n"
+            "<blockquote>Tap a registration button below and fill in your details.</blockquote>\n"
+            "<blockquote>It takes about one minute.</blockquote>\n\n"
+            f"{PREMIUM_EMOJI['step_link']} <b>REGISTRATION:</b>\n\n"
+            f"{PREMIUM_EMOJI['step_ru']} OPEN ACCOUNT FOR RUSSIA\n"
+            f"{PREMIUM_EMOJI['step_world']} OPEN ACCOUNT FOR OTHER COUNTRIES\n\n"
+            f"{PREMIUM_EMOJI['step_bang']}{PREMIUM_EMOJI['step_bang']}{PREMIUM_EMOJI['step_bang']} <b>IMPORTANT</b>\n\n"
+            "If you already have an account, tap\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_key']} <b>I ALREADY HAVE AN ACCOUNT</b></blockquote>\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['step_check']}{PREMIUM_EMOJI['step_check']}{PREMIUM_EMOJI['step_check']} "
+            "<b>After registration:</b></blockquote>\n"
+            "<blockquote>Return to this chat.\n\n"
+            "Send your <b>Trader ID.</b></blockquote>\n\n"
+            "Wait for automatic verification.\n\n"
+            "After registration is confirmed, the next Paradox Bot activation step will open."
+        ),
     },
     "TEAM-STEP-01": {
         "ru": "<b>\U0001f465 \u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u043a\u043e\u043c\u0430\u043d\u0434\u0435</b>\n\n\u041e\u0442\u043a\u0440\u043e\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u043f\u043e \u043d\u0430\u0448\u0435\u0439 \u0441\u0441\u044b\u043b\u043a\u0435 \u0438 \u043f\u0440\u0438\u0448\u043b\u0438 Trader ID.",
         "en": "<b>\U0001f465 Team connection</b>\n\nOpen an account through our link and send your Trader ID.",
     },
     "BOT-EXISTING-ACCOUNT": {
-        "ru": "\u0415\u0441\u043b\u0438 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u0443\u0436\u0435 \u0435\u0441\u0442\u044c, \u043f\u0440\u0438\u0448\u043b\u0438 Trader ID. \u041f\u0440\u0438\u043c\u0435\u0440: <code>ID123456</code>",
-        "en": "If you already have an account, send your Trader ID. Example: <code>ID123456</code>",
+        "ru": (
+            f"{PREMIUM_EMOJI['existing_bang']} <b>ЕСЛИ У ТЕБЯ УЖЕ ЕСТЬ АККАУНТ</b>\n\n"
+            "Чтобы система смогла подтвердить регистрацию и открыть доступ, "
+            "необходимо пройти повторное подключение.\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['existing_one']} <b>УДАЛИ СТАРЫЙ АККАУНТ</b></blockquote>\n"
+            f"<blockquote>Выполни удаление по <a href=\"{POCKET_ACCOUNT_CLOSE_INSTRUCTION_URL}\">инструкции</a> "
+            "и дождись подтверждения закрытия аккаунта.</blockquote>\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['existing_two']} <b>СОЗДАЙ НОВЫЙ АККАУНТ</b></blockquote>\n"
+            "<blockquote>После удаления вернись в бот и зарегистрируйся только по нашей ссылке.</blockquote>\n\n"
+            f"{PREMIUM_EMOJI['existing_link']} <b>РЕГИСТРАЦИЯ:</b>\n\n"
+            f"{PREMIUM_EMOJI['existing_ru']} ОТКРЫТЬ АККАУНТ ДЛЯ РОССИИ\n"
+            f"{PREMIUM_EMOJI['existing_world']} ОТКРЫТЬ АККАУНТ ДЛЯ ДРУГИХ СТРАН\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['existing_three']} <b>ОТПРАВЬ НОВЫЙ TRADER ID</b></blockquote>\n"
+            "<blockquote>Бот проверит регистрацию и откроет следующий этап активации.</blockquote>\n\n"
+            f"{PREMIUM_EMOJI['existing_rocket']} После подтверждения ты сможешь продолжить подключение к <b>Paradox Bot.</b>"
+        ),
+        "en": (
+            f"{PREMIUM_EMOJI['existing_bang']} <b>IF YOU ALREADY HAVE AN ACCOUNT</b>\n\n"
+            "To confirm registration and open access, you need to reconnect through our partner link.\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['existing_one']} <b>DELETE YOUR OLD ACCOUNT</b></blockquote>\n"
+            f"<blockquote>Follow the <a href=\"{POCKET_ACCOUNT_CLOSE_INSTRUCTION_URL}\">instruction</a> "
+            "and wait until account closure is confirmed.</blockquote>\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['existing_two']} <b>CREATE A NEW ACCOUNT</b></blockquote>\n"
+            "<blockquote>After deletion, return to the bot and register only through our link.</blockquote>\n\n"
+            f"{PREMIUM_EMOJI['existing_link']} <b>REGISTRATION:</b>\n\n"
+            f"{PREMIUM_EMOJI['existing_ru']} OPEN ACCOUNT FOR RUSSIA\n"
+            f"{PREMIUM_EMOJI['existing_world']} OPEN ACCOUNT FOR OTHER COUNTRIES\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['existing_three']} <b>SEND YOUR NEW TRADER ID</b></blockquote>\n"
+            "<blockquote>The bot will verify registration and open the next activation step.</blockquote>\n\n"
+            f"{PREMIUM_EMOJI['existing_rocket']} After confirmation, you will continue connecting to <b>Paradox Bot.</b>"
+        ),
     },
     "ID-FORMAT": {
         "ru": "\u041f\u0440\u0438\u0448\u043b\u0438 Trader ID \u0432 \u0444\u043e\u0440\u043c\u0430\u0442\u0435 <code>123456</code> \u0438\u043b\u0438 <code>ID123456</code>.",
@@ -434,26 +575,56 @@ def parse_start_context(text: str | None) -> tuple[str, str | None] | None:
     return START_DEEP_LINKS.get(payload)
 
 
+def upsert_telegram_user(db: Session, user: dict[str, Any]) -> TelegramUserModel | None:
+    telegram_id = user.get("id")
+    if telegram_id is None:
+        return None
+
+    telegram_user = db.query(TelegramUserModel).filter(TelegramUserModel.telegram_id == telegram_id).first()
+    if telegram_user is None:
+        telegram_user = TelegramUserModel(
+            telegram_id=telegram_id,
+            username=user.get("username"),
+            first_name=user.get("first_name"),
+        )
+        db.add(telegram_user)
+    else:
+        telegram_user.username = user.get("username")
+        telegram_user.first_name = user.get("first_name")
+
+    return telegram_user
+
+
+def get_or_create_user_settings(db: Session, telegram_id: int) -> UserSettings:
+    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
+    if settings_row is not None:
+        return settings_row
+
+    settings_row = UserSettings(telegram_id=telegram_id)
+    db.add(settings_row)
+    return settings_row
+
+
+def get_or_create_funnel_session(db: Session, telegram_id: int) -> FunnelSession:
+    funnel_session = db.query(FunnelSession).filter(FunnelSession.telegram_id == telegram_id).first()
+    if funnel_session is not None:
+        return funnel_session
+
+    funnel_session = FunnelSession(telegram_id=telegram_id)
+    db.add(funnel_session)
+    return funnel_session
+
+
 def save_start_context(db: Session, user: dict[str, Any], language: str, funnel_route: str) -> None:
     telegram_id = user.get("id")
     if telegram_id is None:
         return
 
-    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
-    if settings_row is None:
-        settings_row = UserSettings(
-            telegram_id=telegram_id,
-            username=user.get("username"),
-            first_name=user.get("first_name"),
-            language=language,
-            funnel_route=funnel_route,
-        )
-        db.add(settings_row)
-    else:
-        settings_row.username = user.get("username")
-        settings_row.first_name = user.get("first_name")
-        settings_row.language = language
-        settings_row.funnel_route = funnel_route
+    upsert_telegram_user(db, user)
+    settings_row = get_or_create_user_settings(db, telegram_id)
+    funnel_session = get_or_create_funnel_session(db, telegram_id)
+    settings_row.language = language
+    funnel_session.route = funnel_route
 
     db.commit()
 
@@ -471,8 +642,8 @@ def has_funnel_access(db: Session, user: dict[str, Any]) -> bool:
     if telegram_id is None:
         return False
 
-    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
-    return bool(settings_row and settings_row.funnel_access_granted)
+    funnel_session = db.query(FunnelSession).filter(FunnelSession.telegram_id == telegram_id).first()
+    return bool(funnel_session and funnel_session.access_granted)
 
 
 def grant_funnel_access(db: Session, user: dict[str, Any]) -> None:
@@ -480,19 +651,10 @@ def grant_funnel_access(db: Session, user: dict[str, Any]) -> None:
     if telegram_id is None:
         return
 
-    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
-    if settings_row is None:
-        settings_row = UserSettings(
-            telegram_id=telegram_id,
-            username=user.get("username"),
-            first_name=user.get("first_name"),
-            funnel_access_granted=True,
-        )
-        db.add(settings_row)
-    else:
-        settings_row.username = user.get("username")
-        settings_row.first_name = user.get("first_name")
-        settings_row.funnel_access_granted = True
+    upsert_telegram_user(db, user)
+    get_or_create_user_settings(db, telegram_id)
+    funnel_session = get_or_create_funnel_session(db, telegram_id)
+    funnel_session.access_granted = True
 
     db.commit()
 
@@ -570,37 +732,55 @@ def delete_chat_message(client: httpx.Client, chat_id: int, message_id: int | No
         print(f"telegram_delete_message_failed chat_id={chat_id} message_id={message_id} detail={telegram_error_detail(error)}")
 
 
-def schedule_bot_reminder_timer(chat_id: int, telegram_id: int, token: str, language: str, stage: int) -> None:
-    if stage < 1 or stage > len(BOT_REMINDER_DELAYS_SECONDS):
-        return
+def get_reminder_delay_seconds(kind: str, stage: int) -> int | None:
+    reminder_delays = REMINDER_DELAYS_BY_KIND.get(kind)
+    if reminder_delays is None or stage < 1 or stage > len(reminder_delays):
+        return None
 
-    delay_min, delay_max = BOT_REMINDER_DELAYS_SECONDS[stage - 1]
-    delay_seconds = random.randint(delay_min, delay_max)
-    timer = threading.Timer(delay_seconds, run_bot_reminder_stage, args=(chat_id, telegram_id, token, language, stage))
-    timer.daemon = True
-    timer.start()
+    delay_min, delay_max = reminder_delays[stage - 1]
+    return random.randint(delay_min, delay_max)
+
+
+def schedule_bot_reminder_row(funnel_session: FunnelSession, chat_id: int, stage: int, kind: str) -> bool:
+    delay_seconds = get_reminder_delay_seconds(kind, stage)
+    if delay_seconds is None:
+        return False
+
+    funnel_session.reminder_chat_id = chat_id
+    funnel_session.reminder_due_at = datetime.utcnow() + timedelta(seconds=delay_seconds)
     print(
         "telegram_bot_reminder_scheduled "
-        f"telegram_id={telegram_id} stage={stage} delay_seconds={delay_seconds}"
+        f"telegram_id={funnel_session.telegram_id} kind={kind} stage={stage} delay_seconds={delay_seconds}"
     )
+    return True
 
 
-def start_bot_reminder_flow(db: Session, user: dict[str, Any], chat_id: int, language: str) -> None:
+def start_bot_reminder_flow(
+    db: Session,
+    user: dict[str, Any],
+    chat_id: int,
+    language: str,
+    kind: str = BOT_INTRO_REMINDER_KIND,
+    initial_message_id: int | None = None,
+) -> None:
     telegram_id = user.get("id")
     if not isinstance(telegram_id, int):
         return
 
-    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
-    if settings_row is None:
+    if kind not in REMINDER_DELAYS_BY_KIND:
         return
 
-    token = uuid.uuid4().hex
-    settings_row.funnel_reminder_stage = 1
-    settings_row.funnel_reminder_token = token
-    settings_row.funnel_last_reminder_message_id = None
-    db.commit()
+    get_or_create_user_settings(db, telegram_id)
+    funnel_session = get_or_create_funnel_session(db, telegram_id)
 
-    schedule_bot_reminder_timer(chat_id, telegram_id, token, language, stage=1)
+    token = uuid.uuid4().hex
+    funnel_session.reminder_kind = kind
+    funnel_session.reminder_stage = 1
+    funnel_session.reminder_token = token
+    funnel_session.last_reminder_message_id = initial_message_id
+    if not schedule_bot_reminder_row(funnel_session, chat_id, stage=1, kind=kind):
+        return
+    db.commit()
 
 
 def cancel_bot_reminder_flow(db: Session, user: dict[str, Any], client: httpx.Client | None = None, chat_id: int | None = None) -> None:
@@ -608,41 +788,54 @@ def cancel_bot_reminder_flow(db: Session, user: dict[str, Any], client: httpx.Cl
     if not isinstance(telegram_id, int):
         return
 
-    settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
-    if settings_row is None:
+    funnel_session = db.query(FunnelSession).filter(FunnelSession.telegram_id == telegram_id).first()
+    if funnel_session is None:
         return
 
-    last_message_id = settings_row.funnel_last_reminder_message_id
-    settings_row.funnel_reminder_stage = 0
-    settings_row.funnel_reminder_token = ""
-    settings_row.funnel_last_reminder_message_id = None
+    last_message_id = funnel_session.last_reminder_message_id
+    funnel_session.reminder_kind = ""
+    funnel_session.reminder_stage = 0
+    funnel_session.reminder_token = ""
+    funnel_session.reminder_chat_id = None
+    funnel_session.reminder_due_at = None
+    funnel_session.last_reminder_message_id = None
     db.commit()
 
     if client is not None and chat_id is not None:
         delete_chat_message(client, chat_id, last_message_id)
 
 
-def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language: str, stage: int) -> None:
+def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language: str, stage: int, kind: str) -> None:
     db = SessionLocal()
     try:
-        settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
-        if settings_row is None:
+        funnel_session = db.query(FunnelSession).filter(FunnelSession.telegram_id == telegram_id).first()
+        if funnel_session is None:
             return
-        if settings_row.funnel_reminder_token != token or settings_row.funnel_reminder_stage != stage:
+        if (
+            funnel_session.reminder_kind != kind
+            or funnel_session.reminder_token != token
+            or funnel_session.reminder_stage != stage
+        ):
             return
-        if settings_row.funnel_access_granted:
+        if funnel_session.access_granted:
             cancel_bot_reminder_flow(db, {"id": telegram_id})
             return
 
+        reminder_delays = REMINDER_DELAYS_BY_KIND.get(kind)
+        if reminder_delays is None:
+            cancel_bot_reminder_flow(db, {"id": telegram_id})
+            return
+
+        telegram_user = db.query(TelegramUserModel).filter(TelegramUserModel.telegram_id == telegram_id).first()
         user = {
             "id": telegram_id,
-            "username": settings_row.username,
-            "first_name": settings_row.first_name,
+            "username": telegram_user.username if telegram_user else None,
+            "first_name": telegram_user.first_name if telegram_user else None,
         }
         with httpx.Client(timeout=20) as client:
-            delete_chat_message(client, chat_id, settings_row.funnel_last_reminder_message_id)
+            delete_chat_message(client, chat_id, funnel_session.last_reminder_message_id)
 
-            if stage < len(BOT_REMINDER_DELAYS_SECONDS):
+            if kind == BOT_INTRO_REMINDER_KIND and stage < len(reminder_delays):
                 message_id = copy_source_message(
                     client=client,
                     chat_id=chat_id,
@@ -650,21 +843,125 @@ def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language:
                     language=language,
                     reply_markup=bot_reminder_keyboard(language),
                 )
-                settings_row.funnel_last_reminder_message_id = message_id
-                settings_row.funnel_reminder_stage = stage + 1
+                funnel_session.last_reminder_message_id = message_id
+                funnel_session.reminder_stage = stage + 1
+                schedule_bot_reminder_row(funnel_session, chat_id, stage=stage + 1, kind=kind)
                 db.commit()
-                schedule_bot_reminder_timer(chat_id, telegram_id, token, language, stage=stage + 1)
                 return
 
-            settings_row.funnel_reminder_stage = 0
-            settings_row.funnel_reminder_token = ""
-            settings_row.funnel_last_reminder_message_id = None
-            db.commit()
-            copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
+            if kind == BOT_INTRO_REMINDER_KIND:
+                funnel_session.reminder_kind = ""
+                funnel_session.reminder_stage = 0
+                funnel_session.reminder_token = ""
+                funnel_session.reminder_chat_id = None
+                funnel_session.reminder_due_at = None
+                funnel_session.last_reminder_message_id = None
+                db.commit()
+                message_id = copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
+                start_bot_reminder_flow(db, user, chat_id, language, kind=BOT_STEP_REMINDER_KIND, initial_message_id=message_id)
+                return
+
+            if kind == BOT_STEP_REMINDER_KIND:
+                message_id = copy_funnel_node(
+                    client=client,
+                    chat_id=chat_id,
+                    node_code="BOT-STEP-01",
+                    language=language,
+                    user=user,
+                )
+                funnel_session.last_reminder_message_id = message_id
+                if stage < len(reminder_delays):
+                    funnel_session.reminder_stage = stage + 1
+                    schedule_bot_reminder_row(funnel_session, chat_id, stage=stage + 1, kind=kind)
+                    db.commit()
+                    return
+
+                funnel_session.reminder_kind = ""
+                funnel_session.reminder_stage = 0
+                funnel_session.reminder_token = ""
+                funnel_session.reminder_chat_id = None
+                funnel_session.reminder_due_at = None
+                db.commit()
     except Exception as error:
-        print(f"telegram_bot_reminder_failed telegram_id={telegram_id} stage={stage} detail={telegram_error_detail(error)}")
+        print(f"telegram_bot_reminder_failed telegram_id={telegram_id} kind={kind} stage={stage} detail={telegram_error_detail(error)}")
     finally:
         db.close()
+
+
+def process_due_funnel_reminders() -> None:
+    now = datetime.utcnow()
+    db = SessionLocal()
+    try:
+        due_rows = (
+            db.query(FunnelSession)
+            .filter(
+                FunnelSession.reminder_kind != "",
+                FunnelSession.reminder_stage > 0,
+                FunnelSession.reminder_token != "",
+                FunnelSession.reminder_chat_id.isnot(None),
+                FunnelSession.reminder_due_at.isnot(None),
+                FunnelSession.reminder_due_at <= now,
+            )
+            .order_by(FunnelSession.reminder_due_at.asc())
+            .limit(REMINDER_WORKER_BATCH_SIZE)
+            .all()
+        )
+        jobs = [
+            {
+                "chat_id": row.reminder_chat_id,
+                "telegram_id": row.telegram_id,
+                "token": row.reminder_token,
+                "language": normalize_funnel_language(
+                    (
+                        db.query(UserSettings.language)
+                        .filter(UserSettings.telegram_id == row.telegram_id)
+                        .scalar()
+                    )
+                ),
+                "stage": row.reminder_stage,
+                "kind": row.reminder_kind,
+            }
+            for row in due_rows
+            if row.reminder_chat_id is not None
+        ]
+    finally:
+        db.close()
+
+    for job in jobs:
+        run_bot_reminder_stage(
+            chat_id=int(job["chat_id"]),
+            telegram_id=int(job["telegram_id"]),
+            token=str(job["token"]),
+            language=str(job["language"]),
+            stage=int(job["stage"]),
+            kind=str(job["kind"]),
+        )
+
+
+def run_funnel_reminder_worker() -> None:
+    print("telegram_funnel_reminder_worker_started")
+    while True:
+        try:
+            process_due_funnel_reminders()
+        except Exception as error:
+            print(f"telegram_funnel_reminder_worker_failed detail={telegram_error_detail(error)}")
+        time.sleep(REMINDER_WORKER_POLL_SECONDS)
+
+
+def start_funnel_reminder_worker() -> None:
+    global _reminder_worker_started
+
+    if not settings.telegram_funnel_enabled:
+        print("telegram_funnel_reminder_worker_skipped disabled")
+        return
+
+    with _reminder_worker_lock:
+        if _reminder_worker_started:
+            return
+
+        worker = threading.Thread(target=run_funnel_reminder_worker, daemon=True)
+        worker.start()
+        _reminder_worker_started = True
 
 
 def funnel_ref_keyboard(language: str, *, include_existing_account: bool = True) -> dict[str, Any] | None:
@@ -723,7 +1020,7 @@ def copy_funnel_node(
     node_code: str,
     language: str,
     user: dict[str, Any] | None = None,
-) -> None:
+) -> int | None:
     text_by_language = FUNNEL_NODE_TEXTS.get(node_code)
     if text_by_language is None:
         raise HTTPException(status_code=500, detail=f"Funnel node text is not configured: {node_code}")
@@ -750,7 +1047,10 @@ def copy_funnel_node(
 
     response = client.post(telegram_api_url("sendMessage"), json=payload)
     response.raise_for_status()
-    print(f"telegram_send_node node={node_code} chat_id={chat_id}")
+    result = response.json().get("result") or {}
+    message_id = result.get("message_id")
+    print(f"telegram_send_node node={node_code} chat_id={chat_id} message_id={message_id}")
+    return message_id if isinstance(message_id, int) else None
 
 
 def get_saved_language(db: Session, user: dict[str, Any]) -> str | None:
@@ -771,11 +1071,10 @@ def get_saved_context(db: Session, user: dict[str, Any]) -> tuple[str | None, st
         return None, None
 
     settings_row = db.query(UserSettings).filter(UserSettings.telegram_id == telegram_id).first()
-    if settings_row is None:
-        return None, None
+    funnel_session = db.query(FunnelSession).filter(FunnelSession.telegram_id == telegram_id).first()
 
-    language = settings_row.language if settings_row.language in SUPPORTED_LANGUAGES else None
-    funnel_route = settings_row.funnel_route if settings_row.funnel_route in {"BOT", "TEAM"} else None
+    language = settings_row.language if settings_row and settings_row.language in SUPPORTED_LANGUAGES else None
+    funnel_route = funnel_session.route if funnel_session and funnel_session.route in {"BOT", "TEAM"} else None
     return funnel_route, language
 
 
@@ -1292,6 +1591,7 @@ def handle_trader_id_message(db: Session, user: dict[str, Any], chat_id: int, te
     trader_id = match.group(1)
 
     with httpx.Client(timeout=10) as client:
+        cancel_bot_reminder_flow(db, user, client=client, chat_id=chat_id)
         try:
             get_user_info(trader_id)
         except PocketOptionApiError as error:
@@ -1438,7 +1738,8 @@ def handle_funnel_callback(
         save_start_context(db, user, language, "BOT")
         cancel_bot_reminder_flow(db, user, client=client, chat_id=chat_id)
         set_chat_mini_app_menu(client, chat_id, language, enabled=should_show_mini_app_menu(db, user))
-        copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
+        message_id = copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
+        start_bot_reminder_flow(db, user, chat_id, language, kind=BOT_STEP_REMINDER_KIND, initial_message_id=message_id)
         return texts["callback_ok"]
 
     if action == "team_start":
@@ -1449,6 +1750,7 @@ def handle_funnel_callback(
         return texts["callback_ok"]
 
     if action == "existing_account":
+        cancel_bot_reminder_flow(db, user, client=client, chat_id=chat_id)
         copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-EXISTING-ACCOUNT", language=language, user=user)
         return texts["callback_ok"]
 
