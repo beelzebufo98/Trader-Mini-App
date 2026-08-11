@@ -18,5 +18,6 @@ class FunnelSession(Base):
     reminder_chat_id = Column(BigInteger, nullable=True)
     reminder_due_at = Column(DateTime, nullable=True)
     last_reminder_message_id = Column(Integer, nullable=True)
+    last_media_message_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

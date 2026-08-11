@@ -29,6 +29,7 @@ app.include_router(telegram_router, prefix="/api/v1/telegram", tags=["telegram"]
 def create_tables() -> None:
     Base.metadata.create_all(bind=engine)
     ensure_user_settings_columns()
+    ensure_funnel_session_columns()
     ensure_normalized_tables_seeded()
     start_funnel_reminder_worker()
 
@@ -80,6 +81,17 @@ def ensure_user_settings_columns() -> None:
                     "AND funnel_reminder_token != ''"
                 )
             )
+
+
+def ensure_funnel_session_columns() -> None:
+    inspector = inspect(engine)
+    if "funnel_sessions" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("funnel_sessions")}
+    with engine.begin() as connection:
+        if "last_media_message_id" not in columns:
+            connection.execute(text("ALTER TABLE funnel_sessions ADD COLUMN last_media_message_id INTEGER"))
 
 
 def ensure_normalized_tables_seeded() -> None:

@@ -5,6 +5,7 @@ import random
 import threading
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -40,10 +41,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 FUNNEL_NODE_PHOTOS = {
     "BOT-01": PROJECT_ROOT / "images" / "bot-start.png",
     "BOT-STEP-01": PROJECT_ROOT / "images" / "BOT-STEP-01.png",
+    "ID-01": PROJECT_ROOT / "images" / "ID-01. Запрос Trader ID  Напоминание 2.png",
+    "ID-NOT-FOUND": PROJECT_ROOT / "images" / "Ошибка-1-2.png",
 }
 BOT_REMINDER_SOURCE_MESSAGE_ID = 6
+ID_FORMAT_SOURCE_MESSAGE_ID = 21
 BOT_INTRO_REMINDER_KIND = "BOT-01"
 BOT_STEP_REMINDER_KIND = "BOT-STEP-01"
+ID_REMINDER_KIND = "ID-01"
+ID_FORMAT_REMINDER_KIND = "ID-FORMAT"
+ID_NOT_FOUND_REMINDER_KIND = "ID-NOT-FOUND"
 BOT_REMINDER_DELAYS_SECONDS = (
     (5 * 60, 15 * 60),
     (30 * 60, 60 * 60),
@@ -62,15 +69,41 @@ BOT_STEP_REMINDER_DELAYS_SECONDS = (
     (120 * 60, 180 * 60),
     (120 * 60, 180 * 60),
 )
+ID_REMINDER_DELAYS_SECONDS = (
+    (5 * 60, 15 * 60),
+    (30 * 60, 60 * 60),
+    (30 * 60, 60 * 60),
+    (30 * 60, 60 * 60),
+    (60 * 60, 120 * 60),
+    (60 * 60, 120 * 60),
+    (60 * 60, 120 * 60),
+    (120 * 60, 180 * 60),
+    (120 * 60, 180 * 60),
+    (120 * 60, 180 * 60),
+    (120 * 60, 180 * 60),
+)
+ID_FORMAT_REMINDER_DELAYS_SECONDS = ((15 * 60, 15 * 60),)
+ID_NOT_FOUND_REMINDER_DELAYS_SECONDS = ((15 * 60, 15 * 60),)
 REMINDER_DELAYS_BY_KIND = {
     BOT_INTRO_REMINDER_KIND: BOT_REMINDER_DELAYS_SECONDS,
     BOT_STEP_REMINDER_KIND: BOT_STEP_REMINDER_DELAYS_SECONDS,
+    ID_REMINDER_KIND: ID_REMINDER_DELAYS_SECONDS,
+    ID_FORMAT_REMINDER_KIND: ID_FORMAT_REMINDER_DELAYS_SECONDS,
+    ID_NOT_FOUND_REMINDER_KIND: ID_NOT_FOUND_REMINDER_DELAYS_SECONDS,
 }
 REMINDER_WORKER_POLL_SECONDS = 15
 REMINDER_WORKER_BATCH_SIZE = 20
 POCKET_ACCOUNT_CLOSE_INSTRUCTION_URL = "https://pocketoption.com/blog/en/interesting/trading-platforms/how-to-close-pocket-option-account/"
 _reminder_worker_lock = threading.Lock()
 _reminder_worker_started = False
+
+
+@dataclass(frozen=True)
+class FunnelDelivery:
+    text_message_id: int | None = None
+    media_message_id: int | None = None
+
+
 PREMIUM_EMOJI = {
     "wave": '<tg-emoji emoji-id="5321095945780209338">\U0001f44b</tg-emoji>',
     "tool": '<tg-emoji emoji-id="5462921117423384478">\U0001f6e0</tg-emoji>',
@@ -101,6 +134,17 @@ PREMIUM_EMOJI = {
     "existing_world": '<tg-emoji emoji-id="5399898266265475100">\U0001f30d</tg-emoji>',
     "existing_three": '<tg-emoji emoji-id="5255836533352572170">3\ufe0f\u20e3</tg-emoji>',
     "existing_rocket": '<tg-emoji emoji-id="5445284980978621387">\U0001f680</tg-emoji>',
+    "id_arrow": '<tg-emoji emoji-id="5215480011322042129">\u27a1\ufe0f</tg-emoji>',
+    "id_question": '<tg-emoji emoji-id="5314504236132747481">\u2049\ufe0f</tg-emoji>',
+    "id_one": '<tg-emoji emoji-id="6084545344924813749">1\ufe0f\u20e3</tg-emoji>',
+    "id_two": '<tg-emoji emoji-id="6084472459329800521">2\ufe0f\u20e3</tg-emoji>',
+    "id_three": '<tg-emoji emoji-id="6084542458706791202">3\ufe0f\u20e3</tg-emoji>',
+    "id_search": '<tg-emoji emoji-id="5188217332748527444">\U0001f50d</tg-emoji>',
+    "not_found_cross": '<tg-emoji emoji-id="5298742255912235479">\u274c</tg-emoji>',
+    "not_found_gear": '<tg-emoji emoji-id="5818705028424141605">\u2699\ufe0f</tg-emoji>',
+    "not_found_link": '<tg-emoji emoji-id="5235579174072112613">\U0001f517</tg-emoji>',
+    "not_found_ru": '<tg-emoji emoji-id="5197708450263476950">\U0001f1f7\U0001f1fa</tg-emoji>',
+    "not_found_world": '<tg-emoji emoji-id="5399898266265475100">\U0001f30d</tg-emoji>',
 }
 START_DEEP_LINKS = {
     "want_bot": ("BOT", None),
@@ -249,6 +293,36 @@ FUNNEL_NODE_TEXTS = {
         "ru": "<b>\U0001f465 \u041f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043a \u043a\u043e\u043c\u0430\u043d\u0434\u0435</b>\n\n\u041e\u0442\u043a\u0440\u043e\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u043f\u043e \u043d\u0430\u0448\u0435\u0439 \u0441\u0441\u044b\u043b\u043a\u0435 \u0438 \u043f\u0440\u0438\u0448\u043b\u0438 Trader ID.",
         "en": "<b>\U0001f465 Team connection</b>\n\nOpen an account through our link and send your Trader ID.",
     },
+    "ID-01": {
+        "ru": (
+            f"<blockquote>{PREMIUM_EMOJI['id_arrow']} {PREMIUM_EMOJI['id_arrow']} {PREMIUM_EMOJI['id_arrow']} "
+            "<b>ДАВАЙ ПРОДОЛЖИМ</b></blockquote>\n\n"
+            "После <i>регистрации</i> в торговом профиле отображается личный номер аккаунта — <b>Trader ID.</b>\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['id_question']} <b>Что нужно сделать:</b></blockquote>\n"
+            f"<blockquote>{PREMIUM_EMOJI['id_one']} <i>Открой торговый профиль.</i>\n\n"
+            f"{PREMIUM_EMOJI['id_two']} <i>Найди номер аккаунта.</i>\n\n"
+            f"{PREMIUM_EMOJI['id_three']} <i>Отправь Trader ID сюда одним сообщением.</i></blockquote>\n\n"
+            "<b>Подойдут варианты:</b>\n"
+            "<blockquote><code>123456</code>\n"
+            "<code>ID123456</code>\n"
+            "<code>ID 123456</code></blockquote>\n\n"
+            f"{PREMIUM_EMOJI['id_search']} После отправки бот автоматически проверит аккаунт в партнёрской базе."
+        ),
+        "en": (
+            f"<blockquote>{PREMIUM_EMOJI['id_arrow']} {PREMIUM_EMOJI['id_arrow']} {PREMIUM_EMOJI['id_arrow']} "
+            "<b>LET'S CONTINUE</b></blockquote>\n\n"
+            "After <i>registration</i>, your trading profile shows your personal account number — <b>Trader ID.</b>\n\n"
+            f"<blockquote>{PREMIUM_EMOJI['id_question']} <b>What to do:</b></blockquote>\n"
+            f"<blockquote>{PREMIUM_EMOJI['id_one']} <i>Open your trading profile.</i>\n\n"
+            f"{PREMIUM_EMOJI['id_two']} <i>Find your account number.</i>\n\n"
+            f"{PREMIUM_EMOJI['id_three']} <i>Send Trader ID here as one message.</i></blockquote>\n\n"
+            "<b>Accepted formats:</b>\n"
+            "<blockquote><code>123456</code>\n"
+            "<code>ID123456</code>\n"
+            "<code>ID 123456</code></blockquote>\n\n"
+            f"{PREMIUM_EMOJI['id_search']} After you send it, the bot will automatically check the account in the partner database."
+        ),
+    },
     "BOT-EXISTING-ACCOUNT": {
         "ru": (
             f"{PREMIUM_EMOJI['existing_bang']} <b>ЕСЛИ У ТЕБЯ УЖЕ ЕСТЬ АККАУНТ</b>\n\n"
@@ -287,8 +361,33 @@ FUNNEL_NODE_TEXTS = {
         "en": "Send Trader ID as <code>123456</code> or <code>ID123456</code>.",
     },
     "ID-NOT-FOUND": {
-        "ru": "<b>\u0410\u043a\u043a\u0430\u0443\u043d\u0442 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u043f\u043e \u043d\u0430\u0448\u0435\u0439 \u0441\u0441\u044b\u043b\u043a\u0435</b>\n\n\u041e\u0442\u043a\u0440\u043e\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 \u043f\u043e \u043e\u0434\u043d\u043e\u0439 \u0438\u0437 \u043a\u043d\u043e\u043f\u043e\u043a \u043d\u0438\u0436\u0435 \u0438 \u043f\u0440\u0438\u0448\u043b\u0438 ID \u0435\u0449\u0451 \u0440\u0430\u0437.",
-        "en": "<b>Account was not found through our link</b>\n\nOpen an account using one of the buttons below and send your ID again.",
+        "ru": (
+            f"<blockquote>{PREMIUM_EMOJI['not_found_cross']} <b>АККАУНТ НЕ НАЙДЕН ПО НАШЕЙ ССЫЛКЕ</b></blockquote>\n\n"
+            "Система не смогла подтвердить партнёрскую регистрацию.\n\n"
+            "<blockquote><i>Возможные причины:</i>\n\n"
+            "• <i>регистрация ещё не завершена;</i>\n"
+            "• <i>аккаунт создан по другой ссылке;</i>\n"
+            "• <i>указан неверный Trader ID;</i>\n"
+            "• <i>данные ещё обновляются.</i></blockquote>\n\n"
+            f"{PREMIUM_EMOJI['not_found_gear']} Проверь номер и отправь другой Trader ID или повторно "
+            "перейди к регистрации.\n\n"
+            f"{PREMIUM_EMOJI['not_found_link']} <b>РЕГИСТРАЦИЯ:</b>\n\n"
+            f"{PREMIUM_EMOJI['not_found_ru']} ОТКРЫТЬ АККАУНТ ДЛЯ РОССИИ\n"
+            f"{PREMIUM_EMOJI['not_found_world']} ОТКРЫТЬ АККАУНТ ДЛЯ ДРУГИХ СТРАН"
+        ),
+        "en": (
+            f"<blockquote>{PREMIUM_EMOJI['not_found_cross']} <b>ACCOUNT WAS NOT FOUND THROUGH OUR LINK</b></blockquote>\n\n"
+            "The system could not confirm partner registration.\n\n"
+            "<blockquote><i>Possible reasons:</i>\n\n"
+            "• <i>registration is not finished yet;</i>\n"
+            "• <i>the account was created through another link;</i>\n"
+            "• <i>the Trader ID is incorrect;</i>\n"
+            "• <i>the data is still updating.</i></blockquote>\n\n"
+            f"{PREMIUM_EMOJI['not_found_gear']} Check the number and send another Trader ID or open registration again.\n\n"
+            f"{PREMIUM_EMOJI['not_found_link']} <b>REGISTRATION:</b>\n\n"
+            f"{PREMIUM_EMOJI['not_found_ru']} OPEN ACCOUNT FOR RUSSIA\n"
+            f"{PREMIUM_EMOJI['not_found_world']} OPEN ACCOUNT FOR OTHER COUNTRIES"
+        ),
     },
     "TOPUP-01": {
         "ru": "<b>\u2705 \u0410\u043a\u043a\u0430\u0443\u043d\u0442 \u043d\u0430\u0439\u0434\u0435\u043d</b>\n\n\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0439 \u0448\u0430\u0433 \u2014 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043f\u043e\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f.",
@@ -732,6 +831,11 @@ def delete_chat_message(client: httpx.Client, chat_id: int, message_id: int | No
         print(f"telegram_delete_message_failed chat_id={chat_id} message_id={message_id} detail={telegram_error_detail(error)}")
 
 
+def delete_funnel_delivery(client: httpx.Client, chat_id: int, text_message_id: int | None, media_message_id: int | None) -> None:
+    delete_chat_message(client, chat_id, media_message_id)
+    delete_chat_message(client, chat_id, text_message_id)
+
+
 def get_reminder_delay_seconds(kind: str, stage: int) -> int | None:
     reminder_delays = REMINDER_DELAYS_BY_KIND.get(kind)
     if reminder_delays is None or stage < 1 or stage > len(reminder_delays):
@@ -762,6 +866,7 @@ def start_bot_reminder_flow(
     language: str,
     kind: str = BOT_INTRO_REMINDER_KIND,
     initial_message_id: int | None = None,
+    initial_media_message_id: int | None = None,
 ) -> None:
     telegram_id = user.get("id")
     if not isinstance(telegram_id, int):
@@ -778,6 +883,7 @@ def start_bot_reminder_flow(
     funnel_session.reminder_stage = 1
     funnel_session.reminder_token = token
     funnel_session.last_reminder_message_id = initial_message_id
+    funnel_session.last_media_message_id = initial_media_message_id
     if not schedule_bot_reminder_row(funnel_session, chat_id, stage=1, kind=kind):
         return
     db.commit()
@@ -793,16 +899,18 @@ def cancel_bot_reminder_flow(db: Session, user: dict[str, Any], client: httpx.Cl
         return
 
     last_message_id = funnel_session.last_reminder_message_id
+    last_media_message_id = funnel_session.last_media_message_id
     funnel_session.reminder_kind = ""
     funnel_session.reminder_stage = 0
     funnel_session.reminder_token = ""
     funnel_session.reminder_chat_id = None
     funnel_session.reminder_due_at = None
     funnel_session.last_reminder_message_id = None
+    funnel_session.last_media_message_id = None
     db.commit()
 
     if client is not None and chat_id is not None:
-        delete_chat_message(client, chat_id, last_message_id)
+        delete_funnel_delivery(client, chat_id, last_message_id, last_media_message_id)
 
 
 def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language: str, stage: int, kind: str) -> None:
@@ -833,7 +941,12 @@ def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language:
             "first_name": telegram_user.first_name if telegram_user else None,
         }
         with httpx.Client(timeout=20) as client:
-            delete_chat_message(client, chat_id, funnel_session.last_reminder_message_id)
+            delete_funnel_delivery(
+                client,
+                chat_id,
+                funnel_session.last_reminder_message_id,
+                funnel_session.last_media_message_id,
+            )
 
             if kind == BOT_INTRO_REMINDER_KIND and stage < len(reminder_delays):
                 message_id = copy_source_message(
@@ -844,6 +957,7 @@ def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language:
                     reply_markup=bot_reminder_keyboard(language),
                 )
                 funnel_session.last_reminder_message_id = message_id
+                funnel_session.last_media_message_id = None
                 funnel_session.reminder_stage = stage + 1
                 schedule_bot_reminder_row(funnel_session, chat_id, stage=stage + 1, kind=kind)
                 db.commit()
@@ -856,20 +970,83 @@ def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language:
                 funnel_session.reminder_chat_id = None
                 funnel_session.reminder_due_at = None
                 funnel_session.last_reminder_message_id = None
+                funnel_session.last_media_message_id = None
                 db.commit()
-                message_id = copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
-                start_bot_reminder_flow(db, user, chat_id, language, kind=BOT_STEP_REMINDER_KIND, initial_message_id=message_id)
+                delivery = copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
+                start_bot_reminder_flow(
+                    db,
+                    user,
+                    chat_id,
+                    language,
+                    kind=BOT_STEP_REMINDER_KIND,
+                    initial_message_id=delivery.text_message_id,
+                    initial_media_message_id=delivery.media_message_id,
+                )
+                return
+
+            if kind == ID_REMINDER_KIND:
+                delivery = copy_funnel_node(
+                    client=client,
+                    chat_id=chat_id,
+                    node_code="ID-01",
+                    language=language,
+                    user=user,
+                )
+                funnel_session.last_reminder_message_id = delivery.text_message_id
+                funnel_session.last_media_message_id = delivery.media_message_id
+                if stage < len(reminder_delays):
+                    funnel_session.reminder_stage = stage + 1
+                    schedule_bot_reminder_row(funnel_session, chat_id, stage=stage + 1, kind=kind)
+                    db.commit()
+                    return
+
+                funnel_session.reminder_kind = ""
+                funnel_session.reminder_stage = 0
+                funnel_session.reminder_token = ""
+                funnel_session.reminder_chat_id = None
+                funnel_session.reminder_due_at = None
+                funnel_session.last_reminder_message_id = None
+                funnel_session.last_media_message_id = None
+                db.commit()
+                return
+
+            if kind in {ID_FORMAT_REMINDER_KIND, ID_NOT_FOUND_REMINDER_KIND}:
+                funnel_session.reminder_kind = ""
+                funnel_session.reminder_stage = 0
+                funnel_session.reminder_token = ""
+                funnel_session.reminder_chat_id = None
+                funnel_session.reminder_due_at = None
+                funnel_session.last_reminder_message_id = None
+                funnel_session.last_media_message_id = None
+                db.commit()
+                delivery = copy_funnel_node(
+                    client=client,
+                    chat_id=chat_id,
+                    node_code="ID-01",
+                    language=language,
+                    user=user,
+                )
+                start_bot_reminder_flow(
+                    db,
+                    user,
+                    chat_id,
+                    language,
+                    kind=ID_REMINDER_KIND,
+                    initial_message_id=delivery.text_message_id,
+                    initial_media_message_id=delivery.media_message_id,
+                )
                 return
 
             if kind == BOT_STEP_REMINDER_KIND:
-                message_id = copy_funnel_node(
+                delivery = copy_funnel_node(
                     client=client,
                     chat_id=chat_id,
                     node_code="BOT-STEP-01",
                     language=language,
                     user=user,
                 )
-                funnel_session.last_reminder_message_id = message_id
+                funnel_session.last_reminder_message_id = delivery.text_message_id
+                funnel_session.last_media_message_id = delivery.media_message_id
                 if stage < len(reminder_delays):
                     funnel_session.reminder_stage = stage + 1
                     schedule_bot_reminder_row(funnel_session, chat_id, stage=stage + 1, kind=kind)
@@ -882,6 +1059,15 @@ def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language:
                 funnel_session.reminder_chat_id = None
                 funnel_session.reminder_due_at = None
                 db.commit()
+                start_bot_reminder_flow(
+                    db,
+                    user,
+                    chat_id,
+                    language,
+                    kind=ID_REMINDER_KIND,
+                    initial_message_id=delivery.text_message_id,
+                    initial_media_message_id=delivery.media_message_id,
+                )
     except Exception as error:
         print(f"telegram_bot_reminder_failed telegram_id={telegram_id} kind={kind} stage={stage} detail={telegram_error_detail(error)}")
     finally:
@@ -1020,7 +1206,7 @@ def copy_funnel_node(
     node_code: str,
     language: str,
     user: dict[str, Any] | None = None,
-) -> int | None:
+) -> FunnelDelivery:
     text_by_language = FUNNEL_NODE_TEXTS.get(node_code)
     if text_by_language is None:
         raise HTTPException(status_code=500, detail=f"Funnel node text is not configured: {node_code}")
@@ -1028,13 +1214,18 @@ def copy_funnel_node(
     text = text_by_language.get(normalize_funnel_language(language), text_by_language["en"])
     text = text.replace("{\u0438\u043c\u044f}", "{name}").replace("{name}", user_display_name(user, language))
     photo_path = FUNNEL_NODE_PHOTOS.get(node_code)
+    media_message_id: int | None = None
     if photo_path is not None and photo_path.exists():
         with photo_path.open("rb") as photo:
-            client.post(
+            photo_response = client.post(
                 telegram_api_url("sendPhoto"),
                 data={"chat_id": chat_id},
                 files={"photo": (photo_path.name, photo, "image/png")},
-            ).raise_for_status()
+            )
+            photo_response.raise_for_status()
+            photo_result = photo_response.json().get("result") or {}
+            photo_message_id = photo_result.get("message_id")
+            media_message_id = photo_message_id if isinstance(photo_message_id, int) else None
 
     payload: dict[str, Any] = {
         "chat_id": chat_id,
@@ -1049,8 +1240,12 @@ def copy_funnel_node(
     response.raise_for_status()
     result = response.json().get("result") or {}
     message_id = result.get("message_id")
-    print(f"telegram_send_node node={node_code} chat_id={chat_id} message_id={message_id}")
-    return message_id if isinstance(message_id, int) else None
+    text_message_id = message_id if isinstance(message_id, int) else None
+    print(
+        f"telegram_send_node node={node_code} chat_id={chat_id} "
+        f"message_id={text_message_id} media_message_id={media_message_id}"
+    )
+    return FunnelDelivery(text_message_id=text_message_id, media_message_id=media_message_id)
 
 
 def get_saved_language(db: Session, user: dict[str, Any]) -> str | None:
@@ -1596,7 +1791,16 @@ def handle_trader_id_message(db: Session, user: dict[str, Any], chat_id: int, te
             get_user_info(trader_id)
         except PocketOptionApiError as error:
             if error.status_code == 404:
-                copy_funnel_node(client, chat_id, "ID-NOT-FOUND", language, user=user)
+                delivery = copy_funnel_node(client, chat_id, "ID-NOT-FOUND", language, user=user)
+                start_bot_reminder_flow(
+                    db,
+                    user,
+                    chat_id,
+                    language,
+                    kind=ID_NOT_FOUND_REMINDER_KIND,
+                    initial_message_id=delivery.text_message_id,
+                    initial_media_message_id=delivery.media_message_id,
+                )
                 return True
 
             send_html_message(client, chat_id, texts["unavailable"])
@@ -1619,7 +1823,24 @@ def handle_invalid_trader_id_message(db: Session, user: dict[str, Any], chat_id:
 
     language = normalize_funnel_language(language or user.get("language_code"))
     with httpx.Client(timeout=10) as client:
-        copy_funnel_node(client, chat_id, "ID-FORMAT", language, user=user)
+        cancel_bot_reminder_flow(db, user, client=client, chat_id=chat_id)
+        message_id = copy_source_message(
+            client=client,
+            chat_id=chat_id,
+            source_message_id=ID_FORMAT_SOURCE_MESSAGE_ID,
+            language=language,
+        )
+        if message_id is None:
+            delivery = copy_funnel_node(client, chat_id, "ID-FORMAT", language, user=user)
+            message_id = delivery.text_message_id
+        start_bot_reminder_flow(
+            db,
+            user,
+            chat_id,
+            language,
+            kind=ID_FORMAT_REMINDER_KIND,
+            initial_message_id=message_id,
+        )
     return True
 
 
@@ -1714,9 +1935,16 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
     with httpx.Client(timeout=10) as client:
         set_chat_mini_app_menu(client, chat_id, language, enabled=should_show_mini_app_menu(db, user))
         try:
-            copy_funnel_node(client=client, chat_id=chat_id, node_code=node_code, language=language, user=user)
+            delivery = copy_funnel_node(client=client, chat_id=chat_id, node_code=node_code, language=language, user=user)
             if node_code == "BOT-01":
-                start_bot_reminder_flow(db, user, chat_id, language)
+                start_bot_reminder_flow(
+                    db,
+                    user,
+                    chat_id,
+                    language,
+                    initial_message_id=delivery.text_message_id,
+                    initial_media_message_id=delivery.media_message_id,
+                )
         except Exception as error:
             send_funnel_delivery_error(client, chat_id, node_code, error)
 
@@ -1738,8 +1966,16 @@ def handle_funnel_callback(
         save_start_context(db, user, language, "BOT")
         cancel_bot_reminder_flow(db, user, client=client, chat_id=chat_id)
         set_chat_mini_app_menu(client, chat_id, language, enabled=should_show_mini_app_menu(db, user))
-        message_id = copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
-        start_bot_reminder_flow(db, user, chat_id, language, kind=BOT_STEP_REMINDER_KIND, initial_message_id=message_id)
+        delivery = copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
+        start_bot_reminder_flow(
+            db,
+            user,
+            chat_id,
+            language,
+            kind=BOT_STEP_REMINDER_KIND,
+            initial_message_id=delivery.text_message_id,
+            initial_media_message_id=delivery.media_message_id,
+        )
         return texts["callback_ok"]
 
     if action == "team_start":
@@ -1751,7 +1987,16 @@ def handle_funnel_callback(
 
     if action == "existing_account":
         cancel_bot_reminder_flow(db, user, client=client, chat_id=chat_id)
-        copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-EXISTING-ACCOUNT", language=language, user=user)
+        delivery = copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-EXISTING-ACCOUNT", language=language, user=user)
+        start_bot_reminder_flow(
+            db,
+            user,
+            chat_id,
+            language,
+            kind=ID_REMINDER_KIND,
+            initial_message_id=delivery.text_message_id,
+            initial_media_message_id=delivery.media_message_id,
+        )
         return texts["callback_ok"]
 
     if action == "check_topup":
