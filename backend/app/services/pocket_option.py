@@ -39,12 +39,16 @@ def get_user_info(user_id: str) -> dict[str, Any]:
     try:
         with httpx.Client(timeout=15) as client:
             response = client.get(url)
-            response.raise_for_status()
-            payload = response.json()
-    except httpx.HTTPStatusError as error:
-        raise PocketOptionRequestError(
-            f"Pocket Option API returned {error.response.status_code}"
-        ) from error
+            try:
+                payload = response.json()
+            except ValueError as error:
+                try:
+                    response.raise_for_status()
+                except httpx.HTTPStatusError as status_error:
+                    raise PocketOptionRequestError(
+                        f"Pocket Option API returned {status_error.response.status_code}"
+                    ) from status_error
+                raise PocketOptionRequestError("Pocket Option API returned invalid JSON") from error
     except (httpx.RequestError, ValueError) as error:
         raise PocketOptionRequestError("Pocket Option API request failed") from error
 
@@ -61,5 +65,12 @@ def get_user_info(user_id: str) -> dict[str, Any]:
             message = "Pocket Option API returned an error"
 
         raise PocketOptionApiError(message=message, status_code=status_code)
+
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        raise PocketOptionRequestError(
+            f"Pocket Option API returned {error.response.status_code}"
+        ) from error
 
     return payload
