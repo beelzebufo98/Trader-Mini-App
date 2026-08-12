@@ -92,6 +92,8 @@ def ensure_funnel_session_columns() -> None:
     with engine.begin() as connection:
         if "last_media_message_id" not in columns:
             connection.execute(text("ALTER TABLE funnel_sessions ADD COLUMN last_media_message_id INTEGER"))
+        if "trader_id" not in columns:
+            connection.execute(text("ALTER TABLE funnel_sessions ADD COLUMN trader_id VARCHAR(64) DEFAULT '' NOT NULL"))
 
 
 def ensure_normalized_tables_seeded() -> None:

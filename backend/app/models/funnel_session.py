@@ -12,6 +12,7 @@ class FunnelSession(Base):
     telegram_id = Column(BigInteger, unique=True, nullable=False, index=True)
     route = Column(String(16), nullable=False, default="")
     access_granted = Column(Boolean, nullable=False, default=False)
+    trader_id = Column(String(64), nullable=False, default="")
     reminder_kind = Column(String(32), nullable=False, default="")
     reminder_stage = Column(Integer, nullable=False, default=0)
     reminder_token = Column(String(64), nullable=False, default="")
