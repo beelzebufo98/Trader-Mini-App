@@ -43,8 +43,10 @@ FUNNEL_NODE_PHOTOS = {
     "TEAM-01": PROJECT_ROOT / "images" / "bot-start.png",
     "BOT-STEP-01": PROJECT_ROOT / "images" / "BOT-STEP-01.png",
     "TEAM-STEP-01": PROJECT_ROOT / "images" / "TEAM-STEP-01.png",
+    "TEAM-SUCCESS": PROJECT_ROOT / "images" / "TEAM-FINAL.png",
     "ID-01": PROJECT_ROOT / "images" / "ID-01. Запрос Trader ID  Напоминание 2.png",
     "ID-NOT-FOUND": PROJECT_ROOT / "images" / "Ошибка-1-2.png",
+    "REMINDER-03": PROJECT_ROOT / "images" / "REMIND.png",
 }
 BOT_REMINDER_SOURCE_MESSAGE_ID = 6
 ID_FORMAT_SOURCE_MESSAGE_ID = 21
@@ -60,6 +62,8 @@ ID_NOT_FOUND_REMINDER_KIND = "ID-NOT-FOUND"
 TOPUP_REMINDER_KIND = "TOPUP-01"
 TOPUP_LOW_REMINDER_KIND = "TOPUP-LOW"
 TOPUP_NOT_FOUND_REMINDER_KIND = "TOPUP-NOT-FOUND"
+REMINDER_03_TOPUP_LOW_KIND = "REMINDER-03:TOPUP-LOW"
+REMINDER_03_TOPUP_NOT_FOUND_KIND = "REMINDER-03:TOPUP-NOT-FOUND"
 MIN_TOPUP_AMOUNT_USD = 20.0
 BOT_REMINDER_DELAYS_SECONDS = (
     (5 * 60, 15 * 60),
@@ -96,6 +100,18 @@ ID_FORMAT_REMINDER_DELAYS_SECONDS = ((15 * 60, 15 * 60),)
 ID_NOT_FOUND_REMINDER_DELAYS_SECONDS = ((15 * 60, 15 * 60),)
 TOPUP_LOW_REMINDER_DELAYS_SECONDS = ((15 * 60, 15 * 60),)
 TOPUP_NOT_FOUND_REMINDER_DELAYS_SECONDS = ((15 * 60, 15 * 60),)
+REMINDER_03_DELAYS_SECONDS = (
+    (30 * 60, 60 * 60),
+    (30 * 60, 60 * 60),
+    (30 * 60, 60 * 60),
+    (60 * 60, 120 * 60),
+    (60 * 60, 120 * 60),
+    (60 * 60, 120 * 60),
+    (120 * 60, 180 * 60),
+    (120 * 60, 180 * 60),
+    (120 * 60, 180 * 60),
+    (120 * 60, 180 * 60),
+)
 TOPUP_REMINDER_DELAYS_SECONDS = (
     (5 * 60, 15 * 60),
     (30 * 60, 60 * 60),
@@ -118,6 +134,8 @@ REMINDER_DELAYS_BY_KIND = {
     TOPUP_REMINDER_KIND: TOPUP_REMINDER_DELAYS_SECONDS,
     TOPUP_LOW_REMINDER_KIND: TOPUP_LOW_REMINDER_DELAYS_SECONDS,
     TOPUP_NOT_FOUND_REMINDER_KIND: TOPUP_NOT_FOUND_REMINDER_DELAYS_SECONDS,
+    REMINDER_03_TOPUP_LOW_KIND: REMINDER_03_DELAYS_SECONDS,
+    REMINDER_03_TOPUP_NOT_FOUND_KIND: REMINDER_03_DELAYS_SECONDS,
 }
 REMINDER_WORKER_POLL_SECONDS = 15
 REMINDER_WORKER_BATCH_SIZE = 20
@@ -188,6 +206,20 @@ PREMIUM_EMOJI = {
     "team_step_key": '<tg-emoji emoji-id="5330115548900501467">\U0001f511</tg-emoji>',
     "team_step_check": '<tg-emoji emoji-id="5206607081334906820">\u2714</tg-emoji>',
     "team_step_play": '<tg-emoji emoji-id="5348125953090403204">\u25b6\ufe0f</tg-emoji>',
+    "team_final_top": '<tg-emoji emoji-id="5415655814079723871">\U0001f51d</tg-emoji>',
+    "team_final_shield": '<tg-emoji emoji-id="5251203410396458957">\U0001f6e1</tg-emoji>',
+    "team_final_star": '<tg-emoji emoji-id="5438496463044752972">\u2b50\ufe0f</tg-emoji>',
+    "team_final_one": '<tg-emoji emoji-id="6084545344924813749">1\ufe0f\u20e3</tg-emoji>',
+    "team_final_two": '<tg-emoji emoji-id="6084472459329800521">2\ufe0f\u20e3</tg-emoji>',
+    "team_final_chat": '<tg-emoji emoji-id="5443038326535759644">\U0001f4ac</tg-emoji>',
+    "team_final_plus": '<tg-emoji emoji-id="5397916757333654639">\u2795</tg-emoji>',
+    "team_final_crown": '<tg-emoji emoji-id="5217822164362739968">\U0001f451</tg-emoji>',
+    "team_final_candle": '<tg-emoji emoji-id="5451882707875276247">\U0001f56f</tg-emoji>',
+    "reminder_03_search": '<tg-emoji emoji-id="5231012545799666522">\U0001f50d</tg-emoji>',
+    "reminder_03_link": '<tg-emoji emoji-id="5235579174072112613">\U0001f517</tg-emoji>',
+    "reminder_03_hundred": '<tg-emoji emoji-id="5341498088408234504">\U0001f4af</tg-emoji>',
+    "reminder_03_heart": '<tg-emoji emoji-id="5296278100030536646">\u2763\ufe0f</tg-emoji>',
+    "reminder_03_down": '<tg-emoji emoji-id="5300951660103743368">\U0001f447</tg-emoji>',
 }
 START_DEEP_LINKS = {
     "want_bot": ("BOT", None),
@@ -213,6 +245,7 @@ FUNNEL_BUTTON_TEXTS = {
         "check_topup": "\U0001f525 \u041f\u0420\u041e\u0412\u0415\u0420\u0418\u0422\u042c \u041f\u041e\u041f\u041e\u041b\u041d\u0415\u041d\u0418\u0415",
         "open_bot": "\U0001f916 \u041e\u0422\u041a\u0420\u042b\u0422\u042c PARADOX BOT",
         "join_team": "\U0001f525 \u0412\u041e\u0419\u0422\u0418 \u0412 \u041a\u041e\u041c\u0410\u041d\u0414\u0423",
+        "continue_registration": "\U0001f525 \u0425\u041e\u0427\u0423 \u0412 \u041a\u041e\u041c\u0410\u041d\u0414\u0423",
         "callback_ok": "\u0413\u043e\u0442\u043e\u0432\u043e",
         "topup_pending": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0443 \u043f\u043e\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0438\u043c \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u043c \u0448\u0430\u0433\u043e\u043c.",
     },
@@ -227,6 +260,7 @@ FUNNEL_BUTTON_TEXTS = {
         "check_topup": "\U0001f525 CHECK DEPOSIT",
         "open_bot": "\U0001f916 OPEN PARADOX BOT",
         "join_team": "\U0001f525 JOIN THE TEAM",
+        "continue_registration": "\U0001f525 I WANT TO JOIN THE TEAM",
         "callback_ok": "Done",
         "topup_pending": "Deposit verification will be connected in the next step.",
     },
@@ -527,12 +561,82 @@ FUNNEL_NODE_TEXTS = {
         "en": "<b>\U0001f916 Paradox Bot access is open</b>",
     },
     "TEAM-SUCCESS": {
-        "ru": "<b>\U0001f465 \u0414\u043e\u0441\u0442\u0443\u043f \u043a \u043a\u043e\u043c\u0430\u043d\u0434\u0435 \u043e\u0442\u043a\u0440\u044b\u0442</b>",
-        "en": "<b>\U0001f465 Team access is open</b>",
+        "ru": (
+            f"{PREMIUM_EMOJI['team_final_top']}{PREMIUM_EMOJI['team_final_top']} "
+            f"<b>ДОСТУП К КОМАНДЕ PARADOX ОТКРЫТ</b> "
+            f"{PREMIUM_EMOJI['team_final_top']}{PREMIUM_EMOJI['team_final_top']}\n\n"
+            f"Все условия выполнены, а твой аккаунт успешно подтверждён! {PREMIUM_EMOJI['team_final_shield']}\n\n"
+            f"{PREMIUM_EMOJI['team_final_star']} Теперь тебе доступен <b>Paradox Bot</b> "
+            "<i>— сигнально-аналитический инструмент для поиска торговых ситуаций по FOREX и OTC-активам.</i>\n\n"
+            "<blockquote><b><i>Что ты получаешь:</i></b>\n\n"
+            "<i>• полный доступ к Paradox Bot;</i>\n"
+            "<i>• алгоритмические прогнозы на основе более чем 30 индикаторов;</i>\n"
+            "<i>• торговую пару и направление;</i>\n"
+            "<i>• время экспирации и параметры входа;</i>\n"
+            "<i>• сигналы и результаты закрытых сделок;</i>\n"
+            "<i>• рабочие торговые сессии;</i>\n"
+            "<i>• материалы и обновления команды;</i>\n"
+            "<i>• доступ в закрытую VIP-группу.</i></blockquote>\n\n"
+            f"{PREMIUM_EMOJI['team_final_one']} Нажми кнопку ниже и запусти <b>Paradox Bot</b>.\n\n"
+            f"{PREMIUM_EMOJI['team_final_two']} Присоединяйся к закрытой группе команды, чтобы получать сигналы, "
+            "следить за торговыми сессиями и видеть результаты закрытых сделок.\n\n"
+            f"{PREMIUM_EMOJI['team_final_chat']} <b>ВСТУПИТЬ В VIP-ГРУППУ</b>\n\n"
+            f"{PREMIUM_EMOJI['team_final_plus']} Доступ уже активирован. <b>Удачи и прибыльных сделок!</b> "
+            f"{PREMIUM_EMOJI['team_final_crown']}{PREMIUM_EMOJI['team_final_candle']}"
+        ),
+        "en": (
+            f"{PREMIUM_EMOJI['team_final_top']}{PREMIUM_EMOJI['team_final_top']} "
+            f"<b>PARADOX TEAM ACCESS IS OPEN</b> "
+            f"{PREMIUM_EMOJI['team_final_top']}{PREMIUM_EMOJI['team_final_top']}\n\n"
+            f"All conditions are complete and your account is confirmed! {PREMIUM_EMOJI['team_final_shield']}\n\n"
+            f"{PREMIUM_EMOJI['team_final_star']} You now have access to <b>Paradox Bot</b>, "
+            "<i>a signal and analytics tool for FOREX and OTC market situations.</i>\n\n"
+            "<blockquote><b><i>What you get:</i></b>\n\n"
+            "<i>• full access to Paradox Bot;</i>\n"
+            "<i>• algorithmic forecasts based on 30+ indicators;</i>\n"
+            "<i>• trading pair and direction;</i>\n"
+            "<i>• expiration time and entry parameters;</i>\n"
+            "<i>• signals and closed trade results;</i>\n"
+            "<i>• working trading sessions;</i>\n"
+            "<i>• team materials and updates;</i>\n"
+            "<i>• access to the closed VIP group.</i></blockquote>\n\n"
+            f"{PREMIUM_EMOJI['team_final_one']} Tap the button below and launch <b>Paradox Bot</b>.\n\n"
+            f"{PREMIUM_EMOJI['team_final_two']} Join the closed team group to receive signals, follow trading sessions, "
+            "and see closed trade results.\n\n"
+            f"{PREMIUM_EMOJI['team_final_chat']} <b>JOIN THE VIP GROUP</b>\n\n"
+            f"{PREMIUM_EMOJI['team_final_plus']} Access is already active. <b>Good luck and profitable trades!</b> "
+            f"{PREMIUM_EMOJI['team_final_crown']}{PREMIUM_EMOJI['team_final_candle']}"
+        ),
     },
     "REMINDER-03": {
-        "ru": "\u041d\u0430\u043f\u043e\u043c\u0438\u043d\u0430\u043d\u0438\u0435: \u0442\u044b \u043c\u043e\u0436\u0435\u0448\u044c \u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0438\u0442\u044c \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435.",
-        "en": "Reminder: you can continue the connection.",
+        "ru": (
+            f"<b>Привет, бро</b>! У нас осталось 3 бесплатных места в команду, "
+            f"забирай последнее! {PREMIUM_EMOJI['reminder_03_search']}\n\n"
+            f"{PREMIUM_EMOJI['reminder_03_link']} <b><i>Статистика за закрытой VIP-группы за неделю:</i></b>\n\n"
+            "<i>Общий доход трейдеров составил {team_total_income}$, личный доход трейдера Paradox FX "
+            "составил {paradox_income}$</i>\n\n"
+            f"{PREMIUM_EMOJI['reminder_03_hundred']} "
+            f'<a href="{settings.team_vip_url or "https://t.me"}"><b>ПОСМОТРЕТЬ</b></a> '
+            "<b>десятки реальных отзывов про работу с Paradox FX</b>\n\n"
+            "Давай продолжим регистрацию и ты получишь бесплатный "
+            f"<b>доступ за 1 минуту</b> {PREMIUM_EMOJI['reminder_03_heart']}\n\n"
+            f"<b>{PREMIUM_EMOJI['reminder_03_down']}Нажми на кнопку \"Хочу в команду\""
+            f"{PREMIUM_EMOJI['reminder_03_down']}</b>"
+        ),
+        "en": (
+            f"<b>Hi, bro</b>! We have 3 free team spots left, take the last one! "
+            f"{PREMIUM_EMOJI['reminder_03_search']}\n\n"
+            f"{PREMIUM_EMOJI['reminder_03_link']} <b><i>Closed VIP group stats for the week:</i></b>\n\n"
+            "<i>Total trader income was {team_total_income}$, and the personal income of the Paradox FX trader "
+            "was {paradox_income}$</i>\n\n"
+            f"{PREMIUM_EMOJI['reminder_03_hundred']} "
+            f'<a href="{settings.team_vip_url or "https://t.me"}"><b>SEE</b></a> '
+            "<b>dozens of real reviews about Paradox FX</b>\n\n"
+            "Continue registration and get free "
+            f"<b>access in 1 minute</b> {PREMIUM_EMOJI['reminder_03_heart']}\n\n"
+            f"<b>{PREMIUM_EMOJI['reminder_03_down']}Tap \"I want to join the team\""
+            f"{PREMIUM_EMOJI['reminder_03_down']}</b>"
+        ),
     },
 }
 FUNNEL_NODE_TEXTS["TEAM-01"] = FUNNEL_NODE_TEXTS["BOT-01"]
@@ -876,6 +980,13 @@ def grant_funnel_access(db: Session, user: dict[str, Any]) -> None:
     get_or_create_user_settings(db, telegram_id)
     funnel_session = get_or_create_funnel_session(db, telegram_id)
     funnel_session.access_granted = True
+    funnel_session.reminder_kind = ""
+    funnel_session.reminder_stage = 0
+    funnel_session.reminder_token = ""
+    funnel_session.reminder_chat_id = None
+    funnel_session.reminder_due_at = None
+    funnel_session.last_reminder_message_id = None
+    funnel_session.last_media_message_id = None
 
     db.commit()
 
@@ -1076,7 +1187,7 @@ def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language:
                     chat_id=chat_id,
                     source_message_id=BOT_REMINDER_SOURCE_MESSAGE_ID,
                     language=language,
-                    reply_markup=bot_reminder_keyboard(language),
+                    reply_markup=bot_reminder_keyboard(language, funnel_session.route),
                 )
                 funnel_session.last_reminder_message_id = message_id
                 funnel_session.last_media_message_id = None
@@ -1094,7 +1205,8 @@ def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language:
                 funnel_session.last_reminder_message_id = None
                 funnel_session.last_media_message_id = None
                 db.commit()
-                delivery = copy_funnel_node(client=client, chat_id=chat_id, node_code="BOT-STEP-01", language=language, user=user)
+                step_node_code = "TEAM-STEP-01" if funnel_session.route == "TEAM" else "BOT-STEP-01"
+                delivery = copy_funnel_node(client=client, chat_id=chat_id, node_code=step_node_code, language=language, user=user)
                 start_bot_reminder_flow(
                     db,
                     user,
@@ -1180,6 +1292,12 @@ def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language:
                 return
 
             if kind in {TOPUP_LOW_REMINDER_KIND, TOPUP_NOT_FOUND_REMINDER_KIND}:
+                target_node_code = "TOPUP-LOW" if kind == TOPUP_LOW_REMINDER_KIND else "TOPUP-NOT-FOUND"
+                reminder_03_kind = (
+                    REMINDER_03_TOPUP_LOW_KIND
+                    if target_node_code == "TOPUP-LOW"
+                    else REMINDER_03_TOPUP_NOT_FOUND_KIND
+                )
                 funnel_session.reminder_kind = ""
                 funnel_session.reminder_stage = 0
                 funnel_session.reminder_token = ""
@@ -1188,13 +1306,49 @@ def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language:
                 funnel_session.last_reminder_message_id = None
                 funnel_session.last_media_message_id = None
                 db.commit()
-                copy_funnel_node(
+                delivery = send_reminder_03(
                     client=client,
                     chat_id=chat_id,
-                    node_code="REMINDER-03",
                     language=language,
+                    target_node_code=target_node_code,
                     user=user,
                 )
+                start_bot_reminder_flow(
+                    db,
+                    user,
+                    chat_id,
+                    language,
+                    kind=reminder_03_kind,
+                    initial_message_id=delivery.text_message_id,
+                    initial_media_message_id=delivery.media_message_id,
+                )
+                return
+
+            if kind in {REMINDER_03_TOPUP_LOW_KIND, REMINDER_03_TOPUP_NOT_FOUND_KIND}:
+                target_node_code = "TOPUP-LOW" if kind == REMINDER_03_TOPUP_LOW_KIND else "TOPUP-NOT-FOUND"
+                delivery = send_reminder_03(
+                    client=client,
+                    chat_id=chat_id,
+                    language=language,
+                    target_node_code=target_node_code,
+                    user=user,
+                )
+                funnel_session.last_reminder_message_id = delivery.text_message_id
+                funnel_session.last_media_message_id = delivery.media_message_id
+                if stage < len(reminder_delays):
+                    funnel_session.reminder_stage = stage + 1
+                    schedule_bot_reminder_row(funnel_session, chat_id, stage=stage + 1, kind=kind)
+                    db.commit()
+                    return
+
+                funnel_session.reminder_kind = ""
+                funnel_session.reminder_stage = 0
+                funnel_session.reminder_token = ""
+                funnel_session.reminder_chat_id = None
+                funnel_session.reminder_due_at = None
+                funnel_session.last_reminder_message_id = None
+                funnel_session.last_media_message_id = None
+                db.commit()
                 return
 
             if kind == BOT_STEP_REMINDER_KIND:
@@ -1351,13 +1505,22 @@ def funnel_node_keyboard(node_code: str, language: str) -> dict[str, Any] | None
         return {"inline_keyboard": keyboard}
 
     if node_code == "REMINDER-03":
-        return {"inline_keyboard": [[{"text": texts["want_team"], "callback_data": "funnel:team_start"}]]}
+        return {"inline_keyboard": [[{"text": texts["continue_registration"], "callback_data": "funnel:continue_topup_not_found"}]]}
 
     return None
 
 
-def bot_reminder_keyboard(language: str) -> dict[str, Any]:
+def reminder_03_keyboard(language: str, target_node_code: str) -> dict[str, Any]:
     texts = funnel_texts(language)
+    callback_action = "continue_topup_low" if target_node_code == "TOPUP-LOW" else "continue_topup_not_found"
+    return {"inline_keyboard": [[{"text": texts["continue_registration"], "callback_data": f"funnel:{callback_action}"}]]}
+
+
+def bot_reminder_keyboard(language: str, funnel_route: str = "BOT") -> dict[str, Any]:
+    texts = funnel_texts(language)
+    if funnel_route == "TEAM":
+        return {"inline_keyboard": [[{"text": texts["join_team_start"], "callback_data": "funnel:team_start"}]]}
+
     return {"inline_keyboard": [[{"text": texts["get_bot"], "callback_data": "funnel:bot_start"}]]}
 
 
@@ -1403,6 +1566,23 @@ def send_topup_not_found(client: httpx.Client, chat_id: int, language: str, user
     return copy_funnel_node(client=client, chat_id=chat_id, node_code="TOPUP-NOT-FOUND", language=language, user=user)
 
 
+def send_reminder_03(
+    client: httpx.Client,
+    chat_id: int,
+    language: str,
+    target_node_code: str,
+    user: dict[str, Any] | None = None,
+) -> FunnelDelivery:
+    return copy_funnel_node(
+        client=client,
+        chat_id=chat_id,
+        node_code="REMINDER-03",
+        language=language,
+        user=user,
+        reply_markup_override=reminder_03_keyboard(language, target_node_code),
+    )
+
+
 def send_funnel_success(
     client: httpx.Client,
     chat_id: int,
@@ -1430,13 +1610,19 @@ def copy_funnel_node(
     node_code: str,
     language: str,
     user: dict[str, Any] | None = None,
+    reply_markup_override: dict[str, Any] | None = None,
 ) -> FunnelDelivery:
     text_by_language = FUNNEL_NODE_TEXTS.get(node_code)
     if text_by_language is None:
         raise HTTPException(status_code=500, detail=f"Funnel node text is not configured: {node_code}")
 
     text = text_by_language.get(normalize_funnel_language(language), text_by_language["en"])
-    text = text.replace("{\u0438\u043c\u044f}", "{name}").replace("{name}", user_display_name(user, language))
+    text = (
+        text.replace("{\u0438\u043c\u044f}", "{name}")
+        .replace("{name}", user_display_name(user, language))
+        .replace("{team_total_income}", str(random.randint(10000, 100000)))
+        .replace("{paradox_income}", str(random.randint(5000, 15000)))
+    )
     photo_path = FUNNEL_NODE_PHOTOS.get(node_code)
     media_message_id: int | None = None
     if photo_path is not None and photo_path.exists():
@@ -1456,7 +1642,7 @@ def copy_funnel_node(
         "text": text,
         "parse_mode": "HTML",
     }
-    reply_markup = funnel_node_keyboard(node_code, language)
+    reply_markup = reply_markup_override if reply_markup_override is not None else funnel_node_keyboard(node_code, language)
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup
 
@@ -2126,13 +2312,15 @@ def handle_topup_check_callback(db: Session, user: dict[str, Any], chat_id: int,
         payload = get_user_info(trader_id)
     except PocketOptionApiError as error:
         if error.status_code == 404:
-            send_topup_not_found(client=client, chat_id=chat_id, language=language, user=user)
+            delivery = send_topup_not_found(client=client, chat_id=chat_id, language=language, user=user)
             start_bot_reminder_flow(
                 db,
                 user,
                 chat_id,
                 language,
                 kind=TOPUP_NOT_FOUND_REMINDER_KIND,
+                initial_message_id=delivery.text_message_id,
+                initial_media_message_id=delivery.media_message_id,
             )
             return funnel_texts(language)["callback_ok"]
 
@@ -2144,24 +2332,28 @@ def handle_topup_check_callback(db: Session, user: dict[str, Any], chat_id: int,
 
     topup_amount = get_topup_amount(payload)
     if topup_amount is None or topup_amount <= 0:
-        send_topup_not_found(client=client, chat_id=chat_id, language=language, user=user)
+        delivery = send_topup_not_found(client=client, chat_id=chat_id, language=language, user=user)
         start_bot_reminder_flow(
             db,
             user,
             chat_id,
             language,
             kind=TOPUP_NOT_FOUND_REMINDER_KIND,
+            initial_message_id=delivery.text_message_id,
+            initial_media_message_id=delivery.media_message_id,
         )
         return funnel_texts(language)["callback_ok"]
 
     if topup_amount < MIN_TOPUP_AMOUNT_USD:
-        send_topup_low(client=client, chat_id=chat_id, language=language, user=user)
+        delivery = send_topup_low(client=client, chat_id=chat_id, language=language, user=user)
         start_bot_reminder_flow(
             db,
             user,
             chat_id,
             language,
             kind=TOPUP_LOW_REMINDER_KIND,
+            initial_message_id=delivery.text_message_id,
+            initial_media_message_id=delivery.media_message_id,
         )
         return funnel_texts(language)["callback_ok"]
 
@@ -2264,15 +2456,14 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
         set_chat_mini_app_menu(client, chat_id, language, enabled=should_show_mini_app_menu(db, user))
         try:
             delivery = copy_funnel_node(client=client, chat_id=chat_id, node_code=node_code, language=language, user=user)
-            if node_code == "BOT-01":
-                start_bot_reminder_flow(
-                    db,
-                    user,
-                    chat_id,
-                    language,
-                    initial_message_id=delivery.text_message_id,
-                    initial_media_message_id=delivery.media_message_id,
-                )
+            start_bot_reminder_flow(
+                db,
+                user,
+                chat_id,
+                language,
+                initial_message_id=delivery.text_message_id,
+                initial_media_message_id=delivery.media_message_id,
+            )
         except Exception as error:
             send_funnel_delivery_error(client, chat_id, node_code, error)
 
@@ -2338,6 +2529,32 @@ def handle_funnel_callback(
 
     if action == "check_topup":
         return handle_topup_check_callback(db=db, user=user, chat_id=chat_id, language=language, client=client)
+
+    if action in {"continue_topup_low", "continue_topup_not_found"}:
+        cancel_bot_reminder_flow(db, user, client=client, chat_id=chat_id)
+        if action == "continue_topup_low":
+            delivery = send_topup_low(client=client, chat_id=chat_id, language=language, user=user)
+            start_bot_reminder_flow(
+                db,
+                user,
+                chat_id,
+                language,
+                kind=TOPUP_LOW_REMINDER_KIND,
+                initial_message_id=delivery.text_message_id,
+                initial_media_message_id=delivery.media_message_id,
+            )
+        else:
+            delivery = send_topup_not_found(client=client, chat_id=chat_id, language=language, user=user)
+            start_bot_reminder_flow(
+                db,
+                user,
+                chat_id,
+                language,
+                kind=TOPUP_NOT_FOUND_REMINDER_KIND,
+                initial_message_id=delivery.text_message_id,
+                initial_media_message_id=delivery.media_message_id,
+            )
+        return texts["callback_ok"]
 
     return texts["callback_ok"]
 
