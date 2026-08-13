@@ -7,7 +7,8 @@ from app.api.pocket_option import router as pocket_option_router
 from app.api.telegram import router as telegram_router, start_funnel_reminder_worker
 from app.config import settings
 from app.database import Base, engine
-from app.models import funnel_session, telegram_user, user_settings
+from app.models import funnel_session, telegram_user, trading, user_settings
+from app.services.trading_signal_worker import start_trading_signal_worker
 
 app = FastAPI(title="Trader Mini Backend")
 
@@ -32,6 +33,7 @@ def create_tables() -> None:
     ensure_funnel_session_columns()
     ensure_normalized_tables_seeded()
     start_funnel_reminder_worker()
+    start_trading_signal_worker()
 
 
 def ensure_user_settings_columns() -> None:

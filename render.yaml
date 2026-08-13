@@ -30,6 +30,8 @@ services:
         sync: false
       - key: TELEGRAM_SOURCE_CHANNEL_ID
         sync: false
+      - key: TELEGRAM_SIGNALS_CHANNEL_ID
+        sync: false
       - key: TEAM_VIP_URL
         sync: false
       - key: POCKET_OPTION_PARTNER_ID

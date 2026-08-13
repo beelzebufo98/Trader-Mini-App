@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from html import escape
 from typing import Any
 
@@ -8,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models.funnel_session import FunnelSession
 from app.models.telegram_user import TelegramUser as TelegramUserModel
+from app.services.devsbite import DevsbiteApiError, DevsbiteConfigError, DevsbiteRequestError
+from app.services.trading_mvp import TradingMvpConfigError, create_mvp_trading_session, format_mvp_session_summary
 from app.telegram.client import copy_message, send_message
 
 
@@ -119,7 +122,12 @@ def broadcast_copy_message(
 
 
 def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int, message: dict[str, Any], text: str) -> bool:
-    if not text.startswith("/admin") and not text.startswith("/broadcast") and not text.startswith("/segments"):
+    if (
+        not text.startswith("/admin")
+        and not text.startswith("/broadcast")
+        and not text.startswith("/segments")
+        and not text.startswith("/signal_mvp")
+    ):
         return False
 
     with httpx.Client(timeout=30) as client:
@@ -145,6 +153,9 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
                     "/broadcast_segment segment текст - отправить HTML-текст по сегменту\n"
                     "/broadcast_segment segment ответом на сообщение - скопировать сообщение по сегменту\n"
                     "/broadcast_test текст - отправить тест только себе\n\n"
+                    "<b>Торговые сессии MVP</b>\n"
+                    "/signal_mvp - создать тестовую OTC-сессию по EUR/USD OTC и положить due jobs в БД\n\n"
+                    "/signal_mvp now - создать такую же сессию со стартом через 15 секунд для быстрой проверки воркера\n\n"
                     "<b>Как отправлять</b>\n"
                     "<b>1. HTML-текст:</b>\n"
                     "<code>/broadcast &lt;b&gt;Заголовок&lt;/b&gt;\n"
@@ -187,6 +198,23 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
             lines = ["<b>Сегменты рассылки</b>"]
             lines.extend(f"{segment}: <b>{count}</b>" for segment, count in counts.items())
             send_admin_message(client, chat_id, "\n".join(lines))
+            return True
+
+        if command_name == "/signal_mvp":
+            try:
+                start_at = datetime.utcnow() + timedelta(seconds=15) if command_body.strip() == "now" else None
+                session = create_mvp_trading_session(db, created_by_telegram_id=user.get("id"), start_at=start_at)
+            except (
+                DevsbiteApiError,
+                DevsbiteConfigError,
+                DevsbiteRequestError,
+                TradingMvpConfigError,
+                ValueError,
+            ) as error:
+                send_admin_message(client, chat_id, f"Не удалось создать MVP-сессию: <code>{escape(str(error))}</code>")
+                return True
+
+            send_admin_message(client, chat_id, format_mvp_session_summary(session))
             return True
 
         if command_name == "/broadcast_test":

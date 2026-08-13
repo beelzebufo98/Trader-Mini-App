@@ -75,12 +75,29 @@ def send_message(
     return client.post(telegram_api_url("sendMessage"), json=payload)
 
 
-def send_photo(client: httpx.Client, chat_id: int, photo_path: Path) -> httpx.Response:
+def send_photo(
+    client: httpx.Client,
+    chat_id: int,
+    photo_path: Path,
+    *,
+    caption: str | None = None,
+    parse_mode: str | None = None,
+    reply_markup: dict[str, Any] | None = None,
+) -> httpx.Response:
+    content_type = "image/jpeg" if photo_path.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
+    data: dict[str, Any] = {"chat_id": chat_id}
+    if caption is not None:
+        data["caption"] = caption
+    if parse_mode is not None:
+        data["parse_mode"] = parse_mode
+    if reply_markup is not None:
+        data["reply_markup"] = reply_markup
+
     with photo_path.open("rb") as photo:
         return client.post(
             telegram_api_url("sendPhoto"),
-            data={"chat_id": chat_id},
-            files={"photo": (photo_path.name, photo, "image/png")},
+            data=data,
+            files={"photo": (photo_path.name, photo, content_type)},
         )
 
 
