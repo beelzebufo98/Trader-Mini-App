@@ -27,6 +27,7 @@ TRADING_SIGNAL_WORKER_POLL_SECONDS = 10
 TRADING_SIGNAL_WORKER_BATCH_SIZE = 10
 TRADING_SIGNAL_WORKER_MAX_ATTEMPTS = 3
 TRADING_SIGNAL_WORKER_RETRY_SECONDS = 60
+OPEN_JOB_STATUSES = ("scheduled", "processing")
 
 _worker_lock = threading.Lock()
 _worker_started = False
@@ -124,6 +125,83 @@ def _next_overlap_run_at() -> datetime:
 def _mark_session_running(session: TradingSession) -> None:
     if session.status == "scheduled":
         session.status = "running"
+
+
+def _cancel_session_open_work(db: Session, session: TradingSession, reason: str) -> None:
+    now = datetime.utcnow()
+    session.status = "cancelled"
+    session.updated_at = now
+    for signal in session.signals:
+        if signal.status != "finished":
+            signal.status = "cancelled"
+            signal.updated_at = now
+        for attempt in signal.attempts:
+            if attempt.status != "finished":
+                attempt.status = "cancelled"
+                attempt.updated_at = now
+
+    (
+        db.query(TradingSignalJob)
+        .filter(
+            TradingSignalJob.session_id == session.id,
+            TradingSignalJob.status.in_(OPEN_JOB_STATUSES),
+        )
+        .update(
+            {
+                "status": "cancelled",
+                "last_error": reason[:2000],
+                "lock_token": "",
+                "locked_at": None,
+                "updated_at": now,
+            },
+            synchronize_session=False,
+        )
+    )
+
+
+def _should_skip_job(db: Session, job: TradingSignalJob) -> bool:
+    session = job.session
+    if session is None:
+        return False
+
+    if session.status == "cancelled":
+        job.status = "cancelled"
+        job.last_error = "Session was cancelled."
+        job.lock_token = ""
+        job.locked_at = None
+        job.updated_at = datetime.utcnow()
+        db.commit()
+        return True
+
+    if session.status == "finished":
+        job.status = "cancelled"
+        job.last_error = "Session is already finished."
+        job.lock_token = ""
+        job.locked_at = None
+        job.updated_at = datetime.utcnow()
+        db.commit()
+        return True
+
+    newer_session_exists = (
+        db.query(TradingSession.id)
+        .filter(
+            TradingSession.channel_id == session.channel_id,
+            TradingSession.id > session.id,
+            TradingSession.status != "cancelled",
+        )
+        .first()
+        is not None
+    )
+    if newer_session_exists:
+        _cancel_session_open_work(
+            db,
+            session,
+            "Cancelled because a newer trading session exists for this channel.",
+        )
+        db.commit()
+        return True
+
+    return False
 
 
 def _execute_session_soon(db: Session, client: httpx.Client, job: TradingSignalJob) -> None:
@@ -411,6 +489,8 @@ def run_due_trading_signal_jobs() -> int:
         try:
             job = _claim_job(db, job_id, lock_token)
             if job is None:
+                continue
+            if _should_skip_job(db, job):
                 continue
             with httpx.Client(timeout=30) as client:
                 _execute_job(db, client, job)

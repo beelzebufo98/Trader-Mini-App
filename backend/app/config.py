@@ -8,10 +8,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     telegram_bot_token: str = ""
     telegram_webapp_url: str = ""
-    telegram_funnel_enabled: bool = False
-    telegram_funnel_allowed_user_ids: str = ""
     telegram_admin_user_ids: str = ""
-    telegram_funnel_test_mode_enabled: bool = False
     telegram_funnel_test_access_code: str = ""
     telegram_source_channel_id: str = ""
     telegram_signals_channel_id: str = ""
@@ -35,15 +32,6 @@ class Settings(BaseSettings):
         return self.database_url
 
     @property
-    def telegram_funnel_allowed_user_id_set(self) -> set[int]:
-        allowed_ids: set[int] = set()
-        for raw_id in self.telegram_funnel_allowed_user_ids.split(","):
-            value = raw_id.strip()
-            if value.isdigit():
-                allowed_ids.add(int(value))
-        return allowed_ids
-
-    @property
     def telegram_admin_user_id_set(self) -> set[int]:
         admin_ids: set[int] = set()
         for raw_id in self.telegram_admin_user_ids.split(","):
@@ -55,6 +43,7 @@ class Settings(BaseSettings):
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
+        "extra": "ignore",
     }
 
 

@@ -26,18 +26,13 @@ Required Telegram env vars:
 ```bash
 TELEGRAM_BOT_TOKEN=<token from BotFather>
 TELEGRAM_WEBAPP_URL=http://localhost:5173
-TELEGRAM_FUNNEL_ENABLED=false
-TELEGRAM_FUNNEL_ALLOWED_USER_IDS=<comma-separated Telegram user ids>
-TELEGRAM_FUNNEL_TEST_MODE_ENABLED=false
 TELEGRAM_FUNNEL_TEST_ACCESS_CODE=<private test code word>
 TELEGRAM_SOURCE_CHANNEL_ID=<private channel id, optional for future source-channel sends>
 TEAM_VIP_URL=<private VIP team invite link>
 ```
 
-Set `TELEGRAM_FUNNEL_ENABLED=true` in Render to enable deep-link funnel routes, Trader ID checks, and the bot API prototype.
-Only users listed in `TELEGRAM_FUNNEL_ALLOWED_USER_IDS` can use the funnel while it is enabled.
-Set `TELEGRAM_FUNNEL_TEST_MODE_ENABLED=true` to hide the Mini App menu button only for users listed in `TELEGRAM_FUNNEL_ALLOWED_USER_IDS` until bot access is granted. Keep it `false` to leave the Mini App menu available by default.
-Set `TELEGRAM_FUNNEL_TEST_ACCESS_CODE` to a private code word that lets allowed test users pass the funnel checks and receive access without real deposit verification.
+The Telegram funnel is enabled for all users by default. The Mini App menu button is hidden until access is granted.
+Set `TELEGRAM_FUNNEL_TEST_ACCESS_CODE` to a private code word that lets a user pass the funnel checks and receive access without real deposit verification.
 
 Telegram deep links:
 

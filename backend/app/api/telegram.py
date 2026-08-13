@@ -45,7 +45,6 @@ from app.telegram.templates import (
     API_TEST_TEXTS,
     FUNNEL_NODE_PHOTOS,
     FUNNEL_NODE_TEXTS,
-    LEGACY_START_TEXTS,
     LEGACY_TEXT_FORMAT_TEXTS,
     PAIR_CATEGORIES,
     PAIRS_REQUEST_RE,
@@ -221,10 +220,6 @@ def save_start_context(db: Session, user: dict[str, Any], language: str, funnel_
     db.commit()
 
 
-def is_funnel_test_user(user: dict[str, Any]) -> bool:
-    return settings.telegram_funnel_test_mode_enabled and is_funnel_user_allowed(user)
-
-
 def has_funnel_access(db: Session, user: dict[str, Any]) -> bool:
     telegram_id = user.get("id")
     if telegram_id is None:
@@ -255,7 +250,7 @@ def grant_funnel_access(db: Session, user: dict[str, Any]) -> None:
 
 
 def should_show_mini_app_menu(db: Session, user: dict[str, Any]) -> bool:
-    return not is_funnel_test_user(user) or has_funnel_access(db, user)
+    return has_funnel_access(db, user)
 
 
 def is_test_access_code(text: str) -> bool:
@@ -704,10 +699,6 @@ def run_funnel_reminder_worker() -> None:
 def start_funnel_reminder_worker() -> None:
     global _reminder_worker_started
 
-    if not settings.telegram_funnel_enabled:
-        print("telegram_funnel_reminder_worker_skipped disabled")
-        return
-
     with _reminder_worker_lock:
         if _reminder_worker_started:
             return
@@ -868,22 +859,6 @@ def send_html_message(client: httpx.Client, chat_id: int, text: str) -> None:
     send_message(client, chat_id, text, parse_mode="HTML").raise_for_status()
 
 
-def send_legacy_start_message(client: httpx.Client, chat_id: int, language: str) -> None:
-    texts = LEGACY_START_TEXTS.get(normalize_funnel_language(language), LEGACY_START_TEXTS["en"])
-    send_message(
-        client,
-        chat_id,
-        texts["message"],
-        parse_mode="HTML",
-        reply_markup={
-            "inline_keyboard": [
-                [{"text": texts["mini_app"], "web_app": {"url": settings.telegram_webapp_url}}],
-                [{"text": texts["text_format"], "callback_data": "text_format"}],
-            ]
-        },
-    ).raise_for_status()
-
-
 def telegram_error_detail(error: Exception) -> str:
     if isinstance(error, httpx.HTTPStatusError):
         return error.response.text
@@ -1011,12 +986,6 @@ def handle_custom_emoji_id_message(client: httpx.Client, chat_id: int, message: 
 
     send_message(client, chat_id, report, parse_mode="HTML", disable_web_page_preview=True).raise_for_status()
     return True
-
-
-def is_funnel_user_allowed(user: dict[str, Any]) -> bool:
-    allowed_ids = settings.telegram_funnel_allowed_user_id_set
-    telegram_id = user.get("id")
-    return isinstance(telegram_id, int) and telegram_id in allowed_ids
 
 
 def parse_pairs_request(text: str) -> tuple[str, str | None, int] | None:
@@ -1298,7 +1267,7 @@ def handle_signal_request_message(db: Session, user: dict[str, Any], chat_id: in
 
 
 def handle_test_access_code_message(db: Session, user: dict[str, Any], chat_id: int, text: str) -> bool:
-    if not is_funnel_test_user(user) or not is_test_access_code(text):
+    if not is_test_access_code(text):
         return False
 
     funnel_route, language = get_saved_context(db, user)
@@ -1541,12 +1510,6 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
         if callback_data == "text_format":
             handle_callback_query(callback_query, db)
             return {"ok": True}
-        if not settings.telegram_funnel_enabled:
-            print("telegram_funnel disabled")
-            return {"ok": True}
-        if callback_data and callback_data.startswith("funnel:") and not is_funnel_user_allowed(callback_query.get("from") or {}):
-            print(f"telegram_funnel callback_user_not_allowed telegram_id={(callback_query.get('from') or {}).get('id')}")
-            return {"ok": True}
         handle_callback_query(callback_query, db)
         return {"ok": True}
 
@@ -1564,25 +1527,6 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
     db.commit()
 
     if text and handle_admin_command_message(db, user, chat_id, message, text):
-        return {"ok": True}
-
-    if not settings.telegram_funnel_enabled:
-        if text and text.startswith("/start"):
-            language = normalize_funnel_language(user.get("language_code"))
-            with httpx.Client(timeout=10) as client:
-                set_chat_mini_app_menu(client, chat_id, language, enabled=True)
-                send_legacy_start_message(client, chat_id, language)
-        else:
-            print("telegram_funnel disabled")
-        return {"ok": True}
-
-    if not is_funnel_user_allowed(user):
-        with httpx.Client(timeout=10) as client:
-            language = normalize_funnel_language(user.get("language_code"))
-            set_chat_mini_app_menu(client, chat_id, language, enabled=True)
-            if text and text.startswith("/start"):
-                send_legacy_start_message(client, chat_id, language)
-        print(f"telegram_funnel legacy_user telegram_id={user.get('id')}")
         return {"ok": True}
 
     saved_route, saved_language = get_saved_context(db, user)

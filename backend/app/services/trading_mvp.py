@@ -25,6 +25,8 @@ MVP_SESSION_DURATION_MINUTES = 60
 MVP_SESSION_START_DELAY_MINUTES = 60
 MVP_SIGNAL_COUNTDOWN_SECONDS = 60
 MVP_EXPIRY_MINUTE_OPTIONS = (1, 3, 5, 15)
+ACTIVE_SESSION_STATUSES = ("scheduled", "running")
+OPEN_JOB_STATUSES = ("scheduled", "processing")
 
 
 @dataclass(frozen=True)
@@ -143,6 +145,53 @@ def preview_mvp_trading_signal(pair: MvpPairOption, expiry_minutes: int) -> dict
     }
 
 
+def cancel_open_channel_sessions(db: Session, channel_id: int) -> int:
+    open_sessions = (
+        db.query(TradingSession)
+        .filter(
+            TradingSession.channel_id == channel_id,
+            TradingSession.status.in_(ACTIVE_SESSION_STATUSES),
+        )
+        .all()
+    )
+    if not open_sessions:
+        return 0
+
+    session_ids = [session.id for session in open_sessions]
+    now = datetime.utcnow()
+    for session in open_sessions:
+        session.status = "cancelled"
+        session.updated_at = now
+
+    db.query(TradingSignal).filter(TradingSignal.session_id.in_(session_ids), TradingSignal.status != "finished").update(
+        {"status": "cancelled", "updated_at": now},
+        synchronize_session=False,
+    )
+    db.query(TradingSignalAttempt).filter(
+        TradingSignalAttempt.signal_id.in_(
+            db.query(TradingSignal.id).filter(TradingSignal.session_id.in_(session_ids))
+        ),
+        TradingSignalAttempt.status != "finished",
+    ).update(
+        {"status": "cancelled", "updated_at": now},
+        synchronize_session=False,
+    )
+    db.query(TradingSignalJob).filter(
+        TradingSignalJob.session_id.in_(session_ids),
+        TradingSignalJob.status.in_(OPEN_JOB_STATUSES),
+    ).update(
+        {
+            "status": "cancelled",
+            "last_error": "Cancelled because a newer MVP session was created for this channel.",
+            "lock_token": "",
+            "locked_at": None,
+            "updated_at": now,
+        },
+        synchronize_session=False,
+    )
+    return len(open_sessions)
+
+
 def create_mvp_trading_session(
     db: Session,
     *,
@@ -160,6 +209,7 @@ def create_mvp_trading_session(
     entry_time = session_start + timedelta(seconds=MVP_SIGNAL_COUNTDOWN_SECONDS)
     close_time = entry_time + timedelta(seconds=expiry_seconds)
     channel_id = get_signals_channel_id()
+    cancel_open_channel_sessions(db, channel_id)
 
     if preview is None:
         preview = preview_mvp_trading_signal(pair, expiry_minutes)

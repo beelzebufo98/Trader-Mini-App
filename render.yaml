@@ -20,12 +20,6 @@ services:
         sync: false
       - key: TELEGRAM_WEBAPP_URL
         value: https://trader-mini-frontend.onrender.com
-      - key: TELEGRAM_FUNNEL_ENABLED
-        value: "false"
-      - key: TELEGRAM_FUNNEL_ALLOWED_USER_IDS
-        sync: false
-      - key: TELEGRAM_FUNNEL_TEST_MODE_ENABLED
-        value: "false"
       - key: TELEGRAM_FUNNEL_TEST_ACCESS_CODE
         sync: false
       - key: TELEGRAM_SOURCE_CHANNEL_ID
