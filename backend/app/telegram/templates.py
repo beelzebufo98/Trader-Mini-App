@@ -7,6 +7,7 @@ from app.config import settings
 SUPPORTED_LANGUAGES = {"ru", "en", "es", "pt", "tr", "ar"}
 FUNNEL_LANGUAGES = {"ru", "en"}
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+POCKET_ACCOUNT_CLOSE_INSTRUCTION_URL = "https://pocketoption.com/blog/en/interesting/trading-platforms/how-to-close-pocket-option-account/"
 FUNNEL_NODE_PHOTOS = {
     "BOT-01": PROJECT_ROOT / "images" / "bot-start.png",
     "TEAM-01": PROJECT_ROOT / "images" / "bot-start.png",

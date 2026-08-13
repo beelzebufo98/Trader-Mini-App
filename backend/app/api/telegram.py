@@ -151,7 +151,6 @@ REMINDER_DELAYS_BY_KIND = {
 }
 REMINDER_WORKER_POLL_SECONDS = 15
 REMINDER_WORKER_BATCH_SIZE = 20
-POCKET_ACCOUNT_CLOSE_INSTRUCTION_URL = "https://pocketoption.com/blog/en/interesting/trading-platforms/how-to-close-pocket-option-account/"
 _reminder_worker_lock = threading.Lock()
 _reminder_worker_started = False
 
