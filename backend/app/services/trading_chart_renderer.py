@@ -21,6 +21,8 @@ class TradeChartData:
     entry_price: float
     close_price: float
     result: str
+    trade_amount: float = 1000
+    payout_percent: float = 80
     flag_1: str = ""
     flag_2: str = ""
     history_payload: dict[str, Any] | None = None
@@ -120,11 +122,12 @@ def render_trade_result_chart(data: TradeChartData) -> Path:
     tiny_font = _font(24)
 
     asset = " ".join(part for part in [data.flag_1, data.symbol, data.flag_2, data.market_type] if part)
-    payout = 1920 if is_win else 0
-    profit = 920 if is_win else -1000
-    trade_amount = 1000
+    trade_amount = data.trade_amount
+    win_profit = trade_amount * (data.payout_percent / 100)
+    payout = trade_amount + win_profit if is_win else 0
+    profit = win_profit if is_win else -trade_amount
 
-    draw.text((48, 42), f"☆ {data.symbol} +92%", fill=muted, font=title_font)
+    draw.text((48, 42), f"☆ {data.symbol} +{data.payout_percent:.0f}%", fill=muted, font=title_font)
     draw.text((1020, 42), data.close_time.strftime("%H:%M"), fill=text, font=title_font)
     draw.text((48, 112), f"{'↗' if is_buy else '↘'} {_money(trade_amount)}", fill=accent, font=body_font)
     draw.text((540, 112), _money(payout), fill=accent if is_win else muted, font=body_font, anchor="ma")

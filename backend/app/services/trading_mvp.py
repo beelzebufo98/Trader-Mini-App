@@ -18,8 +18,8 @@ MVP_FLAG_2 = "\U0001f1fa\U0001f1f8"
 MVP_EXPIRY_SECONDS = 180
 MVP_EXPIRY_MINUTES = 3
 MVP_MIN_PAYOUT = 80
+MVP_BASE_AMOUNT = Decimal("1000")
 MVP_MIN_CONFIDENCE = 40
-MVP_FALLBACK_CONFIDENCE_MIN = 70
 MVP_MAX_OVERLAPS = 3
 MVP_SESSION_DURATION_MINUTES = 60
 MVP_SESSION_START_DELAY_MINUTES = 60
@@ -94,9 +94,9 @@ def _decimal_or_none(value: float | int | str | None) -> Decimal | None:
 
 def _confidence_from_payload(payload: dict) -> Decimal:
     confidence = _decimal_or_none(payload.get("confidence"))
-    if confidence is not None and Decimal(str(MVP_MIN_CONFIDENCE)) <= confidence <= Decimal("100"):
+    if confidence is not None and Decimal("0") <= confidence <= Decimal("100"):
         return confidence
-    return Decimal(str(MVP_FALLBACK_CONFIDENCE_MIN + randbelow(31)))
+    raise TradingMvpConfigError(f"Devsbite returned invalid confidence: {payload.get('confidence')!r}")
 
 
 def _direction_from_payload(payload: dict) -> str:
@@ -176,7 +176,7 @@ def create_mvp_trading_session(
         starts_at=session_start,
         ends_at=session_end,
         expiry_seconds=expiry_seconds,
-        base_amount=Decimal("0"),
+        base_amount=MVP_BASE_AMOUNT,
         max_overlaps=MVP_MAX_OVERLAPS,
         min_payout=MVP_MIN_PAYOUT,
         min_confidence=MVP_MIN_CONFIDENCE,
@@ -199,6 +199,7 @@ def create_mvp_trading_session(
         direction_source=str(analysis_payload.get("decision_source") or analysis_payload.get("mode") or "devsbite"),
         decision_reason=str(analysis_payload.get("decision_reason") or analysis_payload.get("reason") or ""),
         confidence=confidence,
+        payout=Decimal(str(MVP_MIN_PAYOUT)),
         expiry_seconds=expiry_seconds,
         entry_time=entry_time,
         close_time=close_time,

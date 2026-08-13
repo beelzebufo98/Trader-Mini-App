@@ -90,6 +90,9 @@ def _render_result_chart(
     close_price: Decimal,
     history_payload: dict,
 ):
+    session = signal.session
+    trade_amount = _float_or_none(session.base_amount if session is not None else None) or 1000
+    payout_percent = float(signal.payout or (session.min_payout if session is not None else 80) or 80)
     try:
         return render_trade_result_chart(
             TradeChartData(
@@ -102,6 +105,8 @@ def _render_result_chart(
                 expiry_seconds=(attempt.expiry_seconds if attempt is not None else None) or signal.expiry_seconds,
                 entry_price=float(entry_price),
                 close_price=float(close_price),
+                trade_amount=trade_amount,
+                payout_percent=payout_percent,
                 flag_1=signal.flag_1,
                 flag_2=signal.flag_2,
                 history_payload=history_payload,

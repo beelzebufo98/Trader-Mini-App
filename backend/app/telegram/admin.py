@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from html import escape
 from typing import Any
+from uuid import uuid4
 
 import httpx
 from fastapi import HTTPException
@@ -20,6 +21,8 @@ from app.services.trading_mvp import (
     preview_mvp_trading_signal,
 )
 from app.telegram.client import answer_callback_query, copy_message, send_message
+
+ADMIN_SIGNAL_PREVIEWS: dict[str, dict[str, Any]] = {}
 
 
 def telegram_error_detail(error: Exception) -> str:
@@ -143,14 +146,14 @@ def signal_expiry_keyboard(pair_code: str, fast: bool) -> dict[str, Any]:
     return {"inline_keyboard": rows}
 
 
-def signal_confirm_keyboard(pair_code: str, expiry_minutes: int, fast: bool) -> dict[str, Any]:
+def signal_confirm_keyboard(preview_token: str, fast: bool) -> dict[str, Any]:
     fast_token = "1" if fast else "0"
     return {
         "inline_keyboard": [
             [
                 {
                     "text": "✅ Подтвердить отправку",
-                    "callback_data": signal_callback("confirm", pair_code, expiry_minutes, fast_token),
+                    "callback_data": signal_callback("confirm", preview_token, fast_token),
                 }
             ],
             [{"text": "⬅️ Назад к выбору пар", "callback_data": signal_callback("back", fast_token)}],
@@ -210,8 +213,7 @@ def format_signal_preview(preview: dict) -> str:
         f"Цена входа: <code>{price_text}</code>\n\n"
         f"API signal: <b>{api_signal}</b>\n"
         f"API confidence: <b>{api_confidence}%</b>\n"
-        f"Итог для канала: <b>{preview['direction']}</b>\n"
-        f"Итоговая уверенность: <b>{preview['confidence']}%</b>\n\n"
+        f"Итог для канала: <b>{preview['direction']}</b>\n\n"
         f"Источник решения: <code>{decision_source}</code>\n"
         f"Причина: <code>{decision_reason}</code>\n"
         f"TV / TD: <code>{tv_recommendation}</code> / <code>{td_recommendation}</code>\n\n"
@@ -222,12 +224,14 @@ def format_signal_preview(preview: dict) -> str:
 def send_signal_preview(client: httpx.Client, chat_id: int, pair_code: str, expiry_minutes: int, *, fast: bool) -> None:
     pair = get_mvp_pair_option(pair_code)
     preview = preview_mvp_trading_signal(pair, expiry_minutes)
+    preview_token = uuid4().hex
+    ADMIN_SIGNAL_PREVIEWS[preview_token] = preview
     send_message(
         client,
         chat_id,
         format_signal_preview(preview),
         parse_mode="HTML",
-        reply_markup=signal_confirm_keyboard(pair_code, expiry_minutes, fast),
+        reply_markup=signal_confirm_keyboard(preview_token, fast),
         disable_web_page_preview=True,
     ).raise_for_status()
 
@@ -299,17 +303,23 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                 fast = len(parts) > 2 and parts[2] == "1"
                 send_signal_preview(client, chat_id, pair_code, expiry_minutes, fast=fast)
             elif action == "confirm":
-                pair_code = parts[0]
-                expiry_minutes = int(parts[1])
-                fast = len(parts) > 2 and parts[2] == "1"
-                pair = get_mvp_pair_option(pair_code)
+                preview_token = parts[0]
+                fast = len(parts) > 1 and parts[1] == "1"
+                preview = ADMIN_SIGNAL_PREVIEWS.pop(preview_token, None)
+                if preview is None:
+                    send_admin_message(client, chat_id, "Предпросмотр устарел. Запусти /signal_mvp заново.")
+                    callback_text = "Предпросмотр устарел"
+                    if callback_id:
+                        answer_callback_query(client, callback_id, callback_text).raise_for_status()
+                    return True
                 start_at = datetime.utcnow() + timedelta(seconds=15) if fast else None
                 session = create_mvp_trading_session(
                     db,
                     created_by_telegram_id=user.get("id"),
                     start_at=start_at,
-                    pair=pair,
-                    expiry_minutes=expiry_minutes,
+                    pair=preview["pair"],
+                    expiry_minutes=preview["expiry_minutes"],
+                    preview=preview,
                 )
                 send_admin_message(client, chat_id, format_mvp_session_summary(session))
                 callback_text = "Сессия создана"
@@ -367,7 +377,7 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
                     "/signal_mvp now - тот же мастер, но после подтверждения старт будет через 15 секунд для быстрой проверки воркера\n\n"
                     "Сейчас MVP работает по <b>Forex-парам из ТЗ</b>. "
                     "После выбора пары и экспирации бот сначала показывает, что вернул Devsbite: "
-                    "signal, confidence, цену входа, decision_source/reason и TV/TD. "
+                    "signal, API confidence, цену входа, decision_source/reason и TV/TD. "
                     "В канал сообщение уходит только после кнопки подтверждения. "
                     "Кнопка «Назад» возвращает к выбору пары.\n\n"
                     "<b>Как отправлять</b>\n"
