@@ -40,7 +40,7 @@ from app.telegram.client import (
     send_photo,
     set_chat_menu_button,
 )
-from app.telegram.admin import handle_admin_command_message
+from app.telegram.admin import handle_admin_callback_query, handle_admin_command_message
 from app.telegram.templates import (
     API_TEST_TEXTS,
     FUNNEL_NODE_PHOTOS,
@@ -1535,6 +1535,9 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
     callback_query = update.get("callback_query")
     if callback_query:
         callback_data = callback_query.get("data")
+        if callback_data and callback_data.startswith("admin_signal:"):
+            handle_admin_callback_query(db, callback_query)
+            return {"ok": True}
         if callback_data == "text_format":
             handle_callback_query(callback_query, db)
             return {"ok": True}

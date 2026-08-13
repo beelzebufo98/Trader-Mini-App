@@ -81,6 +81,18 @@ def asset_line(asset: SignalAsset) -> str:
     return flags or asset.symbol
 
 
+def market_symbol(asset: SignalAsset) -> str:
+    market = asset.market_type.upper()
+    symbol = asset.symbol.strip()
+    if symbol.upper().endswith(f" {market}"):
+        return symbol
+    return f"{symbol} {market}".strip()
+
+
+def asset_market_line(asset: SignalAsset) -> str:
+    return f"{asset_line(asset)} {asset.market_type.upper()}".replace(" OTC OTC", " OTC")
+
+
 def image_path(name: str) -> Path | None:
     path = IMAGES_DIR / name
     return path if path.exists() else None
@@ -137,7 +149,7 @@ def send_signal_countdown(
 ) -> int | None:
     text = (
         f"⌛ До нового сигнала осталось <b>{seconds_before} секунд</b>\n"
-        f"💱 Актив: {asset_line(asset)} {asset.market_type.upper()}\n"
+        f"💱 Актив: {asset_market_line(asset)}\n"
         f"🕘 Время входа: <b>{format_time(entry_time)}</b>\n"
         f"⏱ Экспирация: <b>{format_expiry(expiry_seconds)}</b>\n"
         "⚠️ Подготовьте терминал. Направление сделки будет опубликовано через 60 секунд."
@@ -152,8 +164,8 @@ def send_signal_entry(client: httpx.Client, signal: SignalEntry) -> int | None:
         action_ru = "Продать"
     direction_emoji = "🟢" if is_buy else "🔴"
     text = (
-        f"⚡ <b>СИГНАЛ ПО {signal.asset.symbol} {signal.asset.market_type.upper()}</b>\n"
-        f"{asset_line(signal.asset)}\n"
+        f"⚡ <b>СИГНАЛ ПО {market_symbol(signal.asset)}</b>\n"
+        f"{asset_market_line(signal.asset)}\n"
         f"🕘 Время входа: <b>{format_time(signal.entry_time)}</b>\n"
         f"⏱ Экспирация: <b>{format_expiry(signal.expiry_seconds)}</b>\n"
         f"{direction_emoji} <b>{action_ru} ({signal.direction})</b>\n"
@@ -183,7 +195,7 @@ def send_overlap(
     text = (
         f"❌ {title}\n"
         f"🔄 <b>{overlap}</b>\n"
-        f"{asset_line(signal.asset)} {signal.asset.market_type.upper()}\n"
+        f"{asset_market_line(signal.asset)}\n"
         f"🕘 Новый вход: <b>{format_time(signal.entry_time)}</b>\n"
         f"⏱ Экспирация: <b>{format_expiry(signal.expiry_seconds)}</b>\n"
         f"💲 Цена входа: <b>{format_price(signal.entry_price)}</b>\n"
@@ -195,7 +207,7 @@ def send_overlap(
 def send_refund(client: httpx.Client, signal: SignalEntry) -> int | None:
     text = (
         "🔄 <b>Возврат средств</b>\n"
-        f"{asset_line(signal.asset)} {signal.asset.market_type.upper()}\n"
+        f"{asset_market_line(signal.asset)}\n"
         "Фиксируем возврат и повторяем вход без повышения уровня."
     )
     return send_channel_html(client, text)
@@ -205,14 +217,14 @@ def send_signal_result(client: httpx.Client, outcome: SignalOutcome) -> int | No
     if outcome.result == "WIN":
         text = (
             "✅ <b>СИГНАЛ ОТРАБОТАН В ПЛЮС</b>\n"
-            f"{asset_line(outcome.asset)} {outcome.asset.market_type.upper()}\n"
+            f"{asset_market_line(outcome.asset)}\n"
             f"{'🟢' if outcome.direction == 'BUY' else '🔴'} <b>{outcome.direction}</b>\n"
             "💸 Сделка успешно закрылась в прибыль."
         )
     else:
         text = (
             "❌ <b>Серия закрыта в минус</b>\n"
-            f"{asset_line(outcome.asset)} {outcome.asset.market_type.upper()} — все уровни отработаны.\n"
+            f"{asset_market_line(outcome.asset)} — все уровни отработаны.\n"
             "Фиксируем результат, идём дальше."
         )
 

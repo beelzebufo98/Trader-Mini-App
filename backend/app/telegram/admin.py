@@ -10,8 +10,16 @@ from app.config import settings
 from app.models.funnel_session import FunnelSession
 from app.models.telegram_user import TelegramUser as TelegramUserModel
 from app.services.devsbite import DevsbiteApiError, DevsbiteConfigError, DevsbiteRequestError
-from app.services.trading_mvp import TradingMvpConfigError, create_mvp_trading_session, format_mvp_session_summary
-from app.telegram.client import copy_message, send_message
+from app.services.trading_mvp import (
+    MVP_EXPIRY_MINUTE_OPTIONS,
+    TradingMvpConfigError,
+    create_mvp_trading_session,
+    format_mvp_session_summary,
+    get_mvp_pair_option,
+    get_mvp_pair_options,
+    preview_mvp_trading_signal,
+)
+from app.telegram.client import answer_callback_query, copy_message, send_message
 
 
 def telegram_error_detail(error: Exception) -> str:
@@ -90,6 +98,140 @@ def send_admin_message(client: httpx.Client, chat_id: int, text: str) -> None:
     send_message(client, chat_id, text, parse_mode="HTML", disable_web_page_preview=True).raise_for_status()
 
 
+def signal_callback(action: str, *parts: object) -> str:
+    return ":".join(["admin_signal", action, *[str(part) for part in parts]])
+
+
+def signal_pair_keyboard(fast: bool) -> dict[str, Any]:
+    rows: list[list[dict[str, str]]] = []
+    current_row: list[dict[str, str]] = []
+    fast_token = "1" if fast else "0"
+    for pair in get_mvp_pair_options():
+        current_row.append(
+            {
+                "text": f"{pair.flag_1}{pair.flag_2} {pair.symbol}",
+                "callback_data": signal_callback("pair", pair.code, fast_token),
+            }
+        )
+        if len(current_row) == 2:
+            rows.append(current_row)
+            current_row = []
+    if current_row:
+        rows.append(current_row)
+    return {"inline_keyboard": rows}
+
+
+def signal_expiry_keyboard(pair_code: str, fast: bool) -> dict[str, Any]:
+    fast_token = "1" if fast else "0"
+    rows = [
+        [
+            {
+                "text": f"{expiry}m",
+                "callback_data": signal_callback("expiry", pair_code, expiry, fast_token),
+            }
+            for expiry in MVP_EXPIRY_MINUTE_OPTIONS[:2]
+        ],
+        [
+            {
+                "text": f"{expiry}m",
+                "callback_data": signal_callback("expiry", pair_code, expiry, fast_token),
+            }
+            for expiry in MVP_EXPIRY_MINUTE_OPTIONS[2:]
+        ],
+        [{"text": "⬅️ Назад к парам", "callback_data": signal_callback("back", fast_token)}],
+    ]
+    return {"inline_keyboard": rows}
+
+
+def signal_confirm_keyboard(pair_code: str, expiry_minutes: int, fast: bool) -> dict[str, Any]:
+    fast_token = "1" if fast else "0"
+    return {
+        "inline_keyboard": [
+            [
+                {
+                    "text": "✅ Подтвердить отправку",
+                    "callback_data": signal_callback("confirm", pair_code, expiry_minutes, fast_token),
+                }
+            ],
+            [{"text": "⬅️ Назад к выбору пар", "callback_data": signal_callback("back", fast_token)}],
+        ]
+    }
+
+
+def send_signal_pair_menu(client: httpx.Client, chat_id: int, *, fast: bool) -> None:
+    mode_text = "быстрый тест: старт через 15 секунд" if fast else "обычный режим: старт через 60 минут"
+    send_message(
+        client,
+        chat_id,
+        (
+            "<b>MVP торговая сессия</b>\n\n"
+            f"Режим: <b>{mode_text}</b>\n"
+            "Выбери пару. Список взят из ТЗ по Forex-парам. "
+            "В Devsbite и в канал отправляем Forex-символ."
+        ),
+        parse_mode="HTML",
+        reply_markup=signal_pair_keyboard(fast),
+        disable_web_page_preview=True,
+    ).raise_for_status()
+
+
+def send_signal_expiry_menu(client: httpx.Client, chat_id: int, pair_code: str, *, fast: bool) -> None:
+    pair = get_mvp_pair_option(pair_code)
+    send_message(
+        client,
+        chat_id,
+        (
+            "<b>MVP торговая сессия</b>\n\n"
+            f"Пара: <b>{escape(pair.symbol)}</b>\n"
+            "Теперь выбери экспирацию для проверки Devsbite."
+        ),
+        parse_mode="HTML",
+        reply_markup=signal_expiry_keyboard(pair_code, fast),
+        disable_web_page_preview=True,
+    ).raise_for_status()
+
+
+def format_signal_preview(preview: dict) -> str:
+    pair = preview["pair"]
+    analysis = preview["analysis"]
+    price = preview["entry_price"]
+    api_signal = escape(str(analysis.get("signal") or "-"))
+    api_confidence = escape(str(analysis.get("confidence") if analysis.get("confidence") is not None else "-"))
+    decision_source = escape(str(analysis.get("decision_source") or "-"))
+    decision_reason = escape(str(analysis.get("decision_reason") or "-"))
+    tv_recommendation = escape(str(analysis.get("tv_recommendation") or "-"))
+    td_recommendation = escape(str(analysis.get("td_recommendation") or "-"))
+    price_text = escape(str(price)) if price is not None else "-"
+
+    return (
+        "<b>Предпросмотр Devsbite</b>\n\n"
+        f"Пара: <b>{escape(pair.symbol)}</b>\n"
+        f"Экспирация: <b>{preview['expiry_minutes']}m</b>\n"
+        f"Цена входа: <code>{price_text}</code>\n\n"
+        f"API signal: <b>{api_signal}</b>\n"
+        f"API confidence: <b>{api_confidence}%</b>\n"
+        f"Итог для канала: <b>{preview['direction']}</b>\n"
+        f"Итоговая уверенность: <b>{preview['confidence']}%</b>\n\n"
+        f"Источник решения: <code>{decision_source}</code>\n"
+        f"Причина: <code>{decision_reason}</code>\n"
+        f"TV / TD: <code>{tv_recommendation}</code> / <code>{td_recommendation}</code>\n\n"
+        "Если данные подходят, подтверди отправку. Если нет — вернись к выбору пары."
+    )
+
+
+def send_signal_preview(client: httpx.Client, chat_id: int, pair_code: str, expiry_minutes: int, *, fast: bool) -> None:
+    pair = get_mvp_pair_option(pair_code)
+    preview = preview_mvp_trading_signal(pair, expiry_minutes)
+    send_message(
+        client,
+        chat_id,
+        format_signal_preview(preview),
+        parse_mode="HTML",
+        reply_markup=signal_confirm_keyboard(pair_code, expiry_minutes, fast),
+        disable_web_page_preview=True,
+    ).raise_for_status()
+
+
 def broadcast_text(client: httpx.Client, target_chat_ids: list[int], text: str) -> tuple[int, int]:
     sent = 0
     failed = 0
@@ -119,6 +261,73 @@ def broadcast_copy_message(
             failed += 1
             print(f"telegram_broadcast_copy_failed chat_id={target_chat_id} detail={telegram_error_detail(error)}")
     return sent, failed
+
+
+def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> bool:
+    data = callback_query.get("data") or ""
+    if not data.startswith("admin_signal:"):
+        return False
+
+    callback_id = callback_query.get("id")
+    user = callback_query.get("from") or {}
+    message = callback_query.get("message") or {}
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
+    if chat_id is None:
+        return True
+
+    with httpx.Client(timeout=30) as client:
+        if not is_telegram_admin(user):
+            if callback_id:
+                answer_callback_query(client, callback_id, "Недостаточно прав").raise_for_status()
+            print(f"telegram_admin_callback_denied telegram_id={user.get('id')} data={data}")
+            return True
+
+        callback_text = "Ок"
+        try:
+            _, action, *parts = data.split(":")
+            if action == "back":
+                fast = bool(parts and parts[0] == "1")
+                send_signal_pair_menu(client, chat_id, fast=fast)
+            elif action == "pair":
+                pair_code = parts[0]
+                fast = len(parts) > 1 and parts[1] == "1"
+                send_signal_expiry_menu(client, chat_id, pair_code, fast=fast)
+            elif action == "expiry":
+                pair_code = parts[0]
+                expiry_minutes = int(parts[1])
+                fast = len(parts) > 2 and parts[2] == "1"
+                send_signal_preview(client, chat_id, pair_code, expiry_minutes, fast=fast)
+            elif action == "confirm":
+                pair_code = parts[0]
+                expiry_minutes = int(parts[1])
+                fast = len(parts) > 2 and parts[2] == "1"
+                pair = get_mvp_pair_option(pair_code)
+                start_at = datetime.utcnow() + timedelta(seconds=15) if fast else None
+                session = create_mvp_trading_session(
+                    db,
+                    created_by_telegram_id=user.get("id"),
+                    start_at=start_at,
+                    pair=pair,
+                    expiry_minutes=expiry_minutes,
+                )
+                send_admin_message(client, chat_id, format_mvp_session_summary(session))
+                callback_text = "Сессия создана"
+            else:
+                callback_text = "Неизвестное действие"
+        except (
+            DevsbiteApiError,
+            DevsbiteConfigError,
+            DevsbiteRequestError,
+            TradingMvpConfigError,
+            ValueError,
+        ) as error:
+            callback_text = "Ошибка"
+            send_admin_message(client, chat_id, f"Не удалось обработать MVP-сигнал: <code>{escape(str(error))}</code>")
+
+        if callback_id:
+            answer_callback_query(client, callback_id, callback_text).raise_for_status()
+    return True
 
 
 def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int, message: dict[str, Any], text: str) -> bool:
@@ -154,8 +363,13 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
                     "/broadcast_segment segment ответом на сообщение - скопировать сообщение по сегменту\n"
                     "/broadcast_test текст - отправить тест только себе\n\n"
                     "<b>Торговые сессии MVP</b>\n"
-                    "/signal_mvp - создать тестовую OTC-сессию по EUR/USD OTC и положить due jobs в БД\n\n"
-                    "/signal_mvp now - создать такую же сессию со стартом через 15 секунд для быстрой проверки воркера\n\n"
+                    "/signal_mvp - открыть inline-мастер: пара → экспирация → предпросмотр Devsbite → подтверждение\n\n"
+                    "/signal_mvp now - тот же мастер, но после подтверждения старт будет через 15 секунд для быстрой проверки воркера\n\n"
+                    "Сейчас MVP работает по <b>Forex-парам из ТЗ</b>. "
+                    "После выбора пары и экспирации бот сначала показывает, что вернул Devsbite: "
+                    "signal, confidence, цену входа, decision_source/reason и TV/TD. "
+                    "В канал сообщение уходит только после кнопки подтверждения. "
+                    "Кнопка «Назад» возвращает к выбору пары.\n\n"
                     "<b>Как отправлять</b>\n"
                     "<b>1. HTML-текст:</b>\n"
                     "<code>/broadcast &lt;b&gt;Заголовок&lt;/b&gt;\n"
@@ -201,20 +415,7 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
             return True
 
         if command_name == "/signal_mvp":
-            try:
-                start_at = datetime.utcnow() + timedelta(seconds=15) if command_body.strip() == "now" else None
-                session = create_mvp_trading_session(db, created_by_telegram_id=user.get("id"), start_at=start_at)
-            except (
-                DevsbiteApiError,
-                DevsbiteConfigError,
-                DevsbiteRequestError,
-                TradingMvpConfigError,
-                ValueError,
-            ) as error:
-                send_admin_message(client, chat_id, f"Не удалось создать MVP-сессию: <code>{escape(str(error))}</code>")
-                return True
-
-            send_admin_message(client, chat_id, format_mvp_session_summary(session))
+            send_signal_pair_menu(client, chat_id, fast=command_body.strip() == "now")
             return True
 
         if command_name == "/broadcast_test":
