@@ -1069,6 +1069,139 @@ def delete_funnel_delivery(client: httpx.Client, chat_id: int, text_message_id: 
     delete_chat_message(client, chat_id, text_message_id)
 
 
+def is_telegram_admin(user: dict[str, Any]) -> bool:
+    telegram_id = user.get("id")
+    return isinstance(telegram_id, int) and telegram_id in settings.telegram_admin_user_id_set
+
+
+def get_broadcast_target_chat_ids(db: Session) -> list[int]:
+    return [
+        int(row.telegram_id)
+        for row in db.query(TelegramUserModel.telegram_id).order_by(TelegramUserModel.id.asc()).all()
+        if row.telegram_id
+    ]
+
+
+def send_admin_message(client: httpx.Client, chat_id: int, text: str) -> None:
+    client.post(
+        telegram_api_url("sendMessage"),
+        json={
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        },
+    ).raise_for_status()
+
+
+def broadcast_text(client: httpx.Client, target_chat_ids: list[int], text: str) -> tuple[int, int]:
+    sent = 0
+    failed = 0
+    for target_chat_id in target_chat_ids:
+        try:
+            client.post(
+                telegram_api_url("sendMessage"),
+                json={
+                    "chat_id": target_chat_id,
+                    "text": text,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": True,
+                },
+            ).raise_for_status()
+            sent += 1
+        except Exception as error:
+            failed += 1
+            print(f"telegram_broadcast_text_failed chat_id={target_chat_id} detail={telegram_error_detail(error)}")
+    return sent, failed
+
+
+def broadcast_copy_message(
+    client: httpx.Client,
+    target_chat_ids: list[int],
+    source_chat_id: int,
+    source_message_id: int,
+) -> tuple[int, int]:
+    sent = 0
+    failed = 0
+    for target_chat_id in target_chat_ids:
+        try:
+            client.post(
+                telegram_api_url("copyMessage"),
+                json={
+                    "chat_id": target_chat_id,
+                    "from_chat_id": source_chat_id,
+                    "message_id": source_message_id,
+                },
+            ).raise_for_status()
+            sent += 1
+        except Exception as error:
+            failed += 1
+            print(f"telegram_broadcast_copy_failed chat_id={target_chat_id} detail={telegram_error_detail(error)}")
+    return sent, failed
+
+
+def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int, message: dict[str, Any], text: str) -> bool:
+    if not text.startswith("/admin") and not text.startswith("/broadcast"):
+        return False
+
+    with httpx.Client(timeout=30) as client:
+        if not is_telegram_admin(user):
+            print(f"telegram_admin_command_denied telegram_id={user.get('id')} command={text.split(maxsplit=1)[0]}")
+            return True
+
+        command, _, command_body = text.partition(" ")
+        command_name = command.split("@", 1)[0]
+        target_chat_ids = get_broadcast_target_chat_ids(db)
+
+        if command_name == "/admin":
+            send_admin_message(
+                client,
+                chat_id,
+                (
+                    "<b>Админ-команды</b>\n\n"
+                    "/admin - показать команды и число пользователей в базе\n"
+                    "/broadcast текст - отправить HTML-текст всем пользователям\n"
+                    "/broadcast ответом на сообщение - скопировать это сообщение всем пользователям\n"
+                    "/broadcast_test текст - отправить тест только себе\n\n"
+                    f"Пользователей в базе: <b>{len(target_chat_ids)}</b>"
+                ),
+            )
+            return True
+
+        if command_name == "/broadcast_test":
+            reply_to_message = message.get("reply_to_message")
+            if reply_to_message:
+                sent, failed = broadcast_copy_message(client, [chat_id], chat_id, reply_to_message["message_id"])
+            elif command_body.strip():
+                sent, failed = broadcast_text(client, [chat_id], command_body.strip())
+            else:
+                send_admin_message(client, chat_id, "Ответь командой на сообщение или добавь текст после /broadcast_test.")
+                return True
+
+            send_admin_message(client, chat_id, f"Тестовая рассылка: отправлено {sent}, ошибок {failed}.")
+            return True
+
+        if command_name != "/broadcast":
+            send_admin_message(client, chat_id, "Неизвестная админ-команда. Используй /admin.")
+            return True
+
+        reply_to_message = message.get("reply_to_message")
+        if reply_to_message:
+            sent, failed = broadcast_copy_message(client, target_chat_ids, chat_id, reply_to_message["message_id"])
+        elif command_body.strip():
+            sent, failed = broadcast_text(client, target_chat_ids, command_body.strip())
+        else:
+            send_admin_message(client, chat_id, "Ответь /broadcast на сообщение или напиши текст после команды.")
+            return True
+
+        send_admin_message(
+            client,
+            chat_id,
+            f"Рассылка завершена.\nОтправлено: <b>{sent}</b>\nОшибок: <b>{failed}</b>\nВсего целей: <b>{len(target_chat_ids)}</b>",
+        )
+        return True
+
+
 def get_reminder_delay_seconds(kind: str, stage: int) -> int | None:
     reminder_delays = REMINDER_DELAYS_BY_KIND.get(kind)
     if reminder_delays is None or stage < 1 or stage > len(reminder_delays):
@@ -2391,6 +2524,12 @@ def telegram_webhook(update: dict[str, Any], db: Session = Depends(get_db)):
     chat_id = chat.get("id")
 
     if chat_id is None:
+        return {"ok": True}
+
+    upsert_telegram_user(db, user)
+    db.commit()
+
+    if text and handle_admin_command_message(db, user, chat_id, message, text):
         return {"ok": True}
 
     if not settings.telegram_funnel_enabled:
