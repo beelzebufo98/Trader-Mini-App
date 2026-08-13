@@ -145,6 +145,20 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
                     "/broadcast_segment segment текст - отправить HTML-текст по сегменту\n"
                     "/broadcast_segment segment ответом на сообщение - скопировать сообщение по сегменту\n"
                     "/broadcast_test текст - отправить тест только себе\n\n"
+                    "<b>Как отправлять</b>\n"
+                    "<b>1. HTML-текст:</b>\n"
+                    "<code>/broadcast &lt;b&gt;Заголовок&lt;/b&gt;\n"
+                    "&lt;i&gt;Текст рассылки&lt;/i&gt;</code>\n"
+                    "Бот отправит новый текст с parse_mode=HTML. Теги пользователь не увидит.\n\n"
+                    "<b>2. Ответом на сообщение:</b>\n"
+                    "Ответь командой <code>/broadcast</code> на любое сообщение в чате с ботом.\n"
+                    "Бот скопирует это сообщение пользователям через copyMessage: сохраняются медиа, форматирование и premium emoji.\n\n"
+                    "<b>3. По сегменту:</b>\n"
+                    "<code>/broadcast_segment need_topup &lt;b&gt;Напоминание&lt;/b&gt;</code>\n"
+                    "или ответь <code>/broadcast_segment need_topup</code> на готовое сообщение.\n\n"
+                    "<b>4. Тест себе:</b>\n"
+                    "<code>/broadcast_test &lt;b&gt;Проверка&lt;/b&gt;</code>\n"
+                    "или ответь <code>/broadcast_test</code> на сообщение.\n\n"
                     "<b>Основные сегменты</b>\n"
                     "all - все пользователи\n"
                     "bot - ветка получения бота\n"
@@ -154,8 +168,7 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
                     "need_id - ждём Trader ID\n"
                     "need_topup - Trader ID есть, ждём пополнение\n"
                     "bot_need_id / team_need_id - ждём Trader ID по конкретной ветке\n"
-                    "bot_need_topup / team_need_topup - ждём пополнение по конкретной ветке\n"
-                    "reminder:ID-01 - пользователи в конкретном reminder-состоянии\n\n"
+                    "bot_need_topup / team_need_topup - ждём пополнение по конкретной ветке\n\n"
                     f"Пользователей в базе: <b>{len(target_chat_ids)}</b>\n"
                     f"Без доступа: <b>{segment_counts['no_access']}</b>\n"
                     f"Нужно ID: <b>{segment_counts['need_id']}</b>\n"
@@ -168,8 +181,6 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
             counts = broadcast_segment_counts(db)
             lines = ["<b>Сегменты рассылки</b>"]
             lines.extend(f"{segment}: <b>{count}</b>" for segment, count in counts.items())
-            lines.append("")
-            lines.append("Дополнительно: reminder:BOT-STEP-01, reminder:ID-01, reminder:TOPUP-01 и т.д.")
             send_admin_message(client, chat_id, "\n".join(lines))
             return True
 
