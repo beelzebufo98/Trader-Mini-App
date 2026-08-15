@@ -75,6 +75,31 @@ def send_message(
     return client.post(telegram_api_url("sendMessage"), json=payload)
 
 
+def edit_message_text(
+    client: httpx.Client,
+    chat_id: int,
+    message_id: int,
+    text: str,
+    *,
+    parse_mode: str | None = None,
+    reply_markup: dict[str, Any] | None = None,
+    disable_web_page_preview: bool | None = None,
+) -> httpx.Response:
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+    }
+    if parse_mode is not None:
+        payload["parse_mode"] = parse_mode
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup
+    if disable_web_page_preview is not None:
+        payload["disable_web_page_preview"] = disable_web_page_preview
+
+    return client.post(telegram_api_url("editMessageText"), json=payload)
+
+
 def send_photo(
     client: httpx.Client,
     chat_id: int,
@@ -101,8 +126,18 @@ def send_photo(
         )
 
 
-def answer_callback_query(client: httpx.Client, callback_query_id: str, text: str) -> httpx.Response:
+def answer_callback_query(
+    client: httpx.Client,
+    callback_query_id: str,
+    text: str,
+    *,
+    show_alert: bool | None = None,
+) -> httpx.Response:
+    payload: dict[str, Any] = {"callback_query_id": callback_query_id, "text": text}
+    if show_alert is not None:
+        payload["show_alert"] = show_alert
+
     return client.post(
         telegram_api_url("answerCallbackQuery"),
-        json={"callback_query_id": callback_query_id, "text": text},
+        json=payload,
     )

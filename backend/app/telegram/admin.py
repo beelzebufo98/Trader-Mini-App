@@ -16,17 +16,19 @@ from app.services.trading_mvp import (
     ACTIVE_SESSION_STATUSES,
     MVP_EXPIRY_MINUTE_OPTIONS,
     MVP_MARKET_MODES,
+    MVP_MIN_PAYOUT,
     TradingMvpConfigError,
     cancel_trading_session,
     create_mvp_trading_session,
     format_mvp_session_summary,
     get_mvp_pair_option,
     get_mvp_pair_options,
+    get_mvp_pair_options_with_payout,
     normalize_mvp_market_mode,
     preview_mvp_trading_signal,
 )
 from app.services.signal_time import format_signal_time
-from app.telegram.client import answer_callback_query, copy_message, send_message
+from app.telegram.client import answer_callback_query, copy_message, edit_message_text, send_message
 
 ADMIN_SIGNAL_PREVIEWS: dict[str, dict[str, Any]] = {}
 
@@ -103,6 +105,22 @@ def broadcast_segment_counts(db: Session) -> dict[str, int]:
     return {segment: len(get_broadcast_target_chat_ids(db, segment)) for segment in segments}
 
 
+def reset_funnel_session(db: Session, telegram_id: int) -> tuple[bool, bool]:
+    telegram_user_exists = (
+        db.query(TelegramUserModel.id)
+        .filter(TelegramUserModel.telegram_id == telegram_id)
+        .first()
+        is not None
+    )
+    funnel_session = db.query(FunnelSession).filter(FunnelSession.telegram_id == telegram_id).first()
+    if funnel_session is None:
+        return telegram_user_exists, False
+
+    db.delete(funnel_session)
+    db.commit()
+    return telegram_user_exists, True
+
+
 def format_admin_help(total_users: int, segment_counts: dict[str, int]) -> str:
     lines = [
         "<b>Админ-команды</b>",
@@ -114,6 +132,7 @@ def format_admin_help(total_users: int, segment_counts: dict[str, int]) -> str:
         "/broadcast_segment segment текст - отправить HTML-текст по сегменту",
         "/broadcast_segment segment ответом на сообщение - скопировать сообщение по сегменту",
         "/broadcast_test текст - отправить тест только себе",
+        "/funnel_reset TELEGRAM_ID - сбросить состояние воронки пользователя для повторного теста",
         "",
         "<b>Торговые сессии MVP</b>",
         "/signal_mvp - открыть inline-мастер: рынок -> пара -> экспирация -> предпросмотр Devsbite -> подтверждение",
@@ -149,6 +168,10 @@ def format_admin_help(total_users: int, segment_counts: dict[str, int]) -> str:
         "<b>4. Тест себе:</b>",
         "<code>/broadcast_test &lt;b&gt;Проверка&lt;/b&gt;</code>",
         "или ответь <code>/broadcast_test</code> на сообщение.",
+        "",
+        "<b>Сброс тестового пользователя</b>",
+        "<code>/funnel_reset 123456789</code>",
+        "Команда удаляет состояние воронки: route, Trader ID, выданный доступ и pending reminders. Пользователь остается в базе Telegram-пользователей.",
         "",
         "<b>Основные сегменты</b>",
         "all - все пользователи",
@@ -274,10 +297,11 @@ def signal_pair_keyboard(market_mode: str, fast: bool) -> dict[str, Any]:
     current_row: list[dict[str, str]] = []
     fast_token = "1" if fast else "0"
     normalized_market_mode = normalize_mvp_market_mode(market_mode)
-    for pair in get_mvp_pair_options(normalized_market_mode):
+    pairs_with_payout = get_mvp_pair_options_with_payout(normalized_market_mode, min_payout=MVP_MIN_PAYOUT)
+    for pair, payout in pairs_with_payout:
         current_row.append(
             {
-                "text": f"{pair.flag_1}{pair.flag_2} {pair.symbol}",
+                "text": f"{pair.flag_1}{pair.flag_2} {pair.symbol} · {payout}%",
                 "callback_data": signal_callback("pair", normalized_market_mode, pair.code, fast_token),
             }
         )
@@ -286,6 +310,15 @@ def signal_pair_keyboard(market_mode: str, fast: bool) -> dict[str, Any]:
             current_row = []
     if current_row:
         rows.append(current_row)
+    if not rows:
+        rows.append(
+            [
+                {
+                    "text": f"Нет пар с payout >= {MVP_MIN_PAYOUT}%",
+                    "callback_data": signal_callback("noop"),
+                }
+            ]
+        )
     rows.append([{"text": "⬅️ Назад к выбору рынка", "callback_data": signal_callback("markets", fast_token)}])
     return {"inline_keyboard": rows}
 
@@ -335,7 +368,7 @@ def send_signal_pair_menu(client: httpx.Client, chat_id: int, *, market_mode: st
         (
             "<b>MVP торговая сессия</b>\n\n"
             f"Режим рынка: <b>{normalized_market_mode}</b>\n"
-            "Выберите пару из whitelist."
+            f"Выберите пару. Список уже отфильтрован через Devsbite по payout >= {MVP_MIN_PAYOUT}%."
         ),
         parse_mode="HTML",
         reply_markup=signal_pair_keyboard(normalized_market_mode, fast),
@@ -366,6 +399,84 @@ def send_signal_expiry_menu(
         reply_markup=signal_expiry_keyboard(normalized_market_mode, pair_code, fast),
         disable_web_page_preview=True,
     ).raise_for_status()
+
+
+def signal_error_keyboard(market_mode: str | None, fast: bool) -> dict[str, Any] | None:
+    fast_token = "1" if fast else "0"
+    if market_mode is None:
+        return {
+            "inline_keyboard": [
+                [{"text": "⬅️ Назад к выбору рынка", "callback_data": signal_callback("markets", fast_token)}]
+            ]
+        }
+
+    return {
+        "inline_keyboard": [
+            [{"text": "⬅️ Назад к выбору пар", "callback_data": signal_callback("back", market_mode, fast_token)}]
+        ]
+    }
+
+
+def send_signal_callback_error(
+    client: httpx.Client,
+    chat_id: int,
+    message_id: int | None,
+    error: Exception,
+    *,
+    market_mode: str | None = None,
+    fast: bool = False,
+) -> None:
+    detail = escape(str(error))
+    if len(detail) > 900:
+        detail = f"{detail[:900]}..."
+
+    text = (
+        "<b>MVP торговая сессия</b>\n\n"
+        "Не удалось получить данные Devsbite.\n"
+        f"Причина: <code>{detail}</code>\n\n"
+        "Выбери другую пару или вернись назад."
+    )
+    reply_markup = signal_error_keyboard(market_mode, fast)
+
+    if message_id is None:
+        send_message(
+            client,
+            chat_id,
+            text,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        ).raise_for_status()
+        return
+
+    try:
+        edit_message_text(
+            client,
+            chat_id,
+            message_id,
+            text,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        ).raise_for_status()
+    except httpx.HTTPStatusError as edit_error:
+        print(f"telegram_admin_signal_error_edit_failed detail={telegram_error_detail(edit_error)}")
+
+
+def safe_answer_admin_callback(
+    client: httpx.Client,
+    callback_id: str | None,
+    text: str,
+    *,
+    show_alert: bool = False,
+) -> None:
+    if not callback_id:
+        return
+
+    try:
+        answer_callback_query(client, callback_id, text, show_alert=show_alert).raise_for_status()
+    except httpx.HTTPStatusError as error:
+        print(f"telegram_admin_answer_callback_failed detail={telegram_error_detail(error)}")
 
 
 def format_signal_preview(preview: dict) -> str:
@@ -481,6 +592,7 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
     callback_id = callback_query.get("id")
     user = callback_query.get("from") or {}
     message = callback_query.get("message") or {}
+    message_id = message.get("message_id")
     chat = message.get("chat") or {}
     chat_id = chat.get("id")
     if chat_id is None:
@@ -488,28 +600,39 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
 
     with httpx.Client(timeout=30) as client:
         if not is_telegram_admin(user):
-            if callback_id:
-                answer_callback_query(client, callback_id, "Недостаточно прав").raise_for_status()
+            safe_answer_admin_callback(client, callback_id, "Недостаточно прав", show_alert=True)
             print(f"telegram_admin_callback_denied telegram_id={user.get('id')} data={data}")
             return True
 
         callback_text = "Ок"
+        callback_alert = False
+        action = ""
+        parts: list[str] = []
+        error_market_mode: str | None = None
+        error_fast = False
         try:
             _, action, *parts = data.split(":")
-            if action == "markets":
+            if action == "noop":
+                callback_text = "Нет доступных пар"
+            elif action == "markets":
                 fast = bool(parts and parts[0] == "1")
                 send_signal_market_menu(client, chat_id, fast=fast)
             elif action == "back":
                 if parts and parts[0] in MVP_MARKET_MODES:
                     market_mode = parts[0]
                     fast = len(parts) > 1 and parts[1] == "1"
+                    error_market_mode = market_mode
+                    error_fast = fast
                     send_signal_pair_menu(client, chat_id, market_mode=market_mode, fast=fast)
                 else:
                     fast = bool(parts and parts[0] == "1")
+                    error_fast = fast
                     send_signal_market_menu(client, chat_id, fast=fast)
             elif action == "market":
                 market_mode = normalize_mvp_market_mode(parts[0])
                 fast = len(parts) > 1 and parts[1] == "1"
+                error_market_mode = market_mode
+                error_fast = fast
                 send_signal_pair_menu(client, chat_id, market_mode=market_mode, fast=fast)
             elif action == "pair":
                 if parts and parts[0] in MVP_MARKET_MODES:
@@ -532,6 +655,8 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                     pair_code = parts[0]
                     expiry_minutes = int(parts[1])
                     fast = len(parts) > 2 and parts[2] == "1"
+                error_market_mode = market_mode
+                error_fast = fast
                 send_signal_preview(client, chat_id, market_mode, pair_code, expiry_minutes, fast=fast)
             elif action == "preview_back":
                 preview_token = parts[0]
@@ -546,8 +671,7 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                 if preview is None:
                     send_admin_message(client, chat_id, "Предпросмотр устарел. Запусти /signal_mvp заново.")
                     callback_text = "Предпросмотр устарел"
-                    if callback_id:
-                        answer_callback_query(client, callback_id, callback_text).raise_for_status()
+                    safe_answer_admin_callback(client, callback_id, callback_text, show_alert=True)
                     return True
                 start_at = datetime.utcnow() + timedelta(seconds=15) if fast else None
                 session = create_mvp_trading_session(
@@ -572,10 +696,24 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
             IndexError,
         ) as error:
             callback_text = "Ошибка"
-            send_admin_message(client, chat_id, f"Не удалось обработать MVP-сигнал: <code>{escape(str(error))}</code>")
+            callback_alert = True
+            if action == "expiry" and error_market_mode is None and parts:
+                if parts[0] in MVP_MARKET_MODES:
+                    error_market_mode = normalize_mvp_market_mode(parts[0])
+                    error_fast = len(parts) > 3 and parts[3] == "1"
+                else:
+                    error_market_mode = "FOREX"
+                    error_fast = len(parts) > 2 and parts[2] == "1"
+            send_signal_callback_error(
+                client,
+                chat_id,
+                message_id if isinstance(message_id, int) else None,
+                error,
+                market_mode=error_market_mode,
+                fast=error_fast,
+            )
 
-        if callback_id:
-            answer_callback_query(client, callback_id, callback_text).raise_for_status()
+        safe_answer_admin_callback(client, callback_id, callback_text, show_alert=callback_alert)
     return True
 
 
@@ -588,6 +726,7 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
         and not text.startswith("/signal_sessions")
         and not text.startswith("/signal_cancel")
         and not text.startswith("/signal_stop")
+        and not text.startswith("/funnel_reset")
     ):
         return False
 
@@ -628,6 +767,48 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
                 command_name=command_name,
                 command_body=command_body,
                 admin_telegram_id=user.get("id") if isinstance(user.get("id"), int) else None,
+            )
+            return True
+
+        if command_name == "/funnel_reset":
+            telegram_id_text = command_body.strip().split(maxsplit=1)[0] if command_body.strip() else ""
+            if not telegram_id_text.isdigit():
+                send_admin_message(client, chat_id, "Укажи Telegram ID: <code>/funnel_reset 123456789</code>")
+                return True
+
+            telegram_id = int(telegram_id_text)
+            user_exists, session_deleted = reset_funnel_session(db, telegram_id)
+            if session_deleted:
+                send_admin_message(
+                    client,
+                    chat_id,
+                    (
+                        "Состояние воронки сброшено.\n"
+                        f"Telegram ID: <code>{telegram_id}</code>\n"
+                        "Теперь пользователь может заново открыть deep-link или отправить /start."
+                    ),
+                )
+                return True
+
+            if user_exists:
+                send_admin_message(
+                    client,
+                    chat_id,
+                    (
+                        "У пользователя нет активного состояния воронки.\n"
+                        f"Telegram ID: <code>{telegram_id}</code>\n"
+                        "Telegram-пользователь в базе есть, но сбрасывать нечего."
+                    ),
+                )
+                return True
+
+            send_admin_message(
+                client,
+                chat_id,
+                (
+                    "Пользователь не найден в базе.\n"
+                    f"Telegram ID: <code>{telegram_id}</code>"
+                ),
             )
             return True
 

@@ -340,6 +340,32 @@ def _pair_payout_from_devsbite(pair: MvpPairOption) -> Decimal:
     raise TradingMvpConfigError(f"Pair {pair.symbol} was not found in Devsbite pairs")
 
 
+def get_mvp_pair_options_with_payout(
+    market_mode: str | None = None,
+    *,
+    min_payout: int = MVP_MIN_PAYOUT,
+) -> tuple[tuple[MvpPairOption, Decimal], ...]:
+    normalized_market_mode = normalize_mvp_market_mode(market_mode)
+    pair_options = get_mvp_pair_options(normalized_market_mode)
+    instruments_by_market: dict[str, list[dict]] = {}
+
+    for market_type in sorted({pair.market_type for pair in pair_options}):
+        payload = get_pairs(market_type.lower(), min_payout=min_payout)
+        instruments_by_market[market_type] = extract_instruments(payload)
+
+    pairs_with_payout: list[tuple[MvpPairOption, Decimal]] = []
+    for pair in pair_options:
+        for instrument in instruments_by_market.get(pair.market_type, []):
+            if not _instrument_matches_pair(instrument, pair):
+                continue
+            payout = _instrument_payout(instrument)
+            if payout is not None and payout >= Decimal(str(min_payout)):
+                pairs_with_payout.append((pair, payout))
+            break
+
+    return tuple(pairs_with_payout)
+
+
 def _confidence_from_payload(payload: dict) -> Decimal:
     confidence = _decimal_or_none(payload.get("confidence"))
     if confidence is not None and Decimal("0") <= confidence <= Decimal("100"):
