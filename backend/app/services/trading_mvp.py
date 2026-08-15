@@ -7,14 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.trading import TradingSession, TradingSignal, TradingSignalAttempt, TradingSignalJob
-from app.services.devsbite import extract_latest_price, get_combined_analysis, get_quote
+from app.services.devsbite import extract_instruments, extract_latest_price, get_combined_analysis, get_pairs, get_quote
+from app.services.signal_time import format_signal_time
 
-MVP_MARKET_MODE = "FOREX"
-MVP_CATEGORY = "forex"
-MVP_SYMBOL = "EUR/USD"
-MVP_ANALYSIS_SYMBOL = "EUR/USD"
-MVP_FLAG_1 = "\U0001f1ea\U0001f1fa"
-MVP_FLAG_2 = "\U0001f1fa\U0001f1f8"
+MVP_DEFAULT_MARKET_MODE = "FOREX"
+MVP_MARKET_MODES = ("FOREX", "OTC", "MIXED")
 MVP_EXPIRY_SECONDS = 180
 MVP_EXPIRY_MINUTES = 3
 MVP_MIN_PAYOUT = 80
@@ -35,31 +32,169 @@ class MvpPairOption:
     symbol: str
     flag_1: str
     flag_2: str
+    market_type: str = "FOREX"
+    category: str = "forex"
 
 
-MVP_PAIR_OPTIONS = (
-    MvpPairOption("GBPJPY", "GBP/JPY", "\U0001f1ec\U0001f1e7", "\U0001f1ef\U0001f1f5"),
-    MvpPairOption("EURJPY", "EUR/JPY", "\U0001f1ea\U0001f1fa", "\U0001f1ef\U0001f1f5"),
-    MvpPairOption("AUDCAD", "AUD/CAD", "\U0001f1e6\U0001f1fa", "\U0001f1e8\U0001f1e6"),
-    MvpPairOption("AUDCHF", "AUD/CHF", "\U0001f1e6\U0001f1fa", "\U0001f1e8\U0001f1ed"),
-    MvpPairOption("AUDJPY", "AUD/JPY", "\U0001f1e6\U0001f1fa", "\U0001f1ef\U0001f1f5"),
-    MvpPairOption("AUDUSD", "AUD/USD", "\U0001f1e6\U0001f1fa", "\U0001f1fa\U0001f1f8"),
-    MvpPairOption("CADCHF", "CAD/CHF", "\U0001f1e8\U0001f1e6", "\U0001f1e8\U0001f1ed"),
-    MvpPairOption("CHFJPY", "CHF/JPY", "\U0001f1e8\U0001f1ed", "\U0001f1ef\U0001f1f5"),
-    MvpPairOption("EURAUD", "EUR/AUD", "\U0001f1ea\U0001f1fa", "\U0001f1e6\U0001f1fa"),
-    MvpPairOption("EURCAD", "EUR/CAD", "\U0001f1ea\U0001f1fa", "\U0001f1e8\U0001f1e6"),
-    MvpPairOption("EURCHF", "EUR/CHF", "\U0001f1ea\U0001f1fa", "\U0001f1e8\U0001f1ed"),
-    MvpPairOption("EURUSD", "EUR/USD", "\U0001f1ea\U0001f1fa", "\U0001f1fa\U0001f1f8"),
-    MvpPairOption("GBPAUD", "GBP/AUD", "\U0001f1ec\U0001f1e7", "\U0001f1e6\U0001f1fa"),
-    MvpPairOption("GBPCAD", "GBP/CAD", "\U0001f1ec\U0001f1e7", "\U0001f1e8\U0001f1e6"),
-    MvpPairOption("GBPCHF", "GBP/CHF", "\U0001f1ec\U0001f1e7", "\U0001f1e8\U0001f1ed"),
-    MvpPairOption("USDCAD", "USD/CAD", "\U0001f1fa\U0001f1f8", "\U0001f1e8\U0001f1e6"),
-    MvpPairOption("USDCHF", "USD/CHF", "\U0001f1fa\U0001f1f8", "\U0001f1e8\U0001f1ed"),
-    MvpPairOption("USDJPY", "USD/JPY", "\U0001f1fa\U0001f1f8", "\U0001f1ef\U0001f1f5"),
-    MvpPairOption("CADJPY", "CAD/JPY", "\U0001f1e8\U0001f1e6", "\U0001f1ef\U0001f1f5"),
-    MvpPairOption("EURGBP", "EUR/GBP", "\U0001f1ea\U0001f1fa", "\U0001f1ec\U0001f1e7"),
-    MvpPairOption("GBPUSD", "GBP/USD", "\U0001f1ec\U0001f1e7", "\U0001f1fa\U0001f1f8"),
+_CURRENCY_FLAGS = {
+    "AED": "\U0001f1e6\U0001f1ea",
+    "ARS": "\U0001f1e6\U0001f1f7",
+    "AUD": "\U0001f1e6\U0001f1fa",
+    "BDT": "\U0001f1e7\U0001f1e9",
+    "BHD": "\U0001f1e7\U0001f1ed",
+    "BRL": "\U0001f1e7\U0001f1f7",
+    "CAD": "\U0001f1e8\U0001f1e6",
+    "CHF": "\U0001f1e8\U0001f1ed",
+    "CLP": "\U0001f1e8\U0001f1f1",
+    "CNH": "\U0001f1e8\U0001f1f3",
+    "CNY": "\U0001f1e8\U0001f1f3",
+    "COP": "\U0001f1e8\U0001f1f4",
+    "DZD": "\U0001f1e9\U0001f1ff",
+    "EGP": "\U0001f1ea\U0001f1ec",
+    "EUR": "\U0001f1ea\U0001f1fa",
+    "GBP": "\U0001f1ec\U0001f1e7",
+    "HUF": "\U0001f1ed\U0001f1fa",
+    "IDR": "\U0001f1ee\U0001f1e9",
+    "INR": "\U0001f1ee\U0001f1f3",
+    "JOD": "\U0001f1ef\U0001f1f4",
+    "JPY": "\U0001f1ef\U0001f1f5",
+    "KES": "\U0001f1f0\U0001f1ea",
+    "LBP": "\U0001f1f1\U0001f1e7",
+    "MAD": "\U0001f1f2\U0001f1e6",
+    "MXN": "\U0001f1f2\U0001f1fd",
+    "MYR": "\U0001f1f2\U0001f1fe",
+    "NGN": "\U0001f1f3\U0001f1ec",
+    "NOK": "\U0001f1f3\U0001f1f4",
+    "NZD": "\U0001f1f3\U0001f1ff",
+    "OMR": "\U0001f1f4\U0001f1f2",
+    "PHP": "\U0001f1f5\U0001f1ed",
+    "PKR": "\U0001f1f5\U0001f1f0",
+    "QAR": "\U0001f1f6\U0001f1e6",
+    "RUB": "\U0001f1f7\U0001f1fa",
+    "SAR": "\U0001f1f8\U0001f1e6",
+    "SGD": "\U0001f1f8\U0001f1ec",
+    "THB": "\U0001f1f9\U0001f1ed",
+    "TND": "\U0001f1f9\U0001f1f3",
+    "TRY": "\U0001f1f9\U0001f1f7",
+    "UAH": "\U0001f1fa\U0001f1e6",
+    "USD": "\U0001f1fa\U0001f1f8",
+    "VND": "\U0001f1fb\U0001f1f3",
+    "YER": "\U0001f1fe\U0001f1ea",
+    "ZAR": "\U0001f1ff\U0001f1e6",
+}
+
+_FOREX_SYMBOLS = (
+    "GBP/JPY",
+    "EUR/JPY",
+    "AUD/CAD",
+    "AUD/CHF",
+    "AUD/JPY",
+    "AUD/USD",
+    "CAD/CHF",
+    "CHF/JPY",
+    "EUR/AUD",
+    "EUR/CAD",
+    "EUR/CHF",
+    "EUR/USD",
+    "GBP/AUD",
+    "GBP/CAD",
+    "GBP/CHF",
+    "USD/CAD",
+    "USD/CHF",
+    "USD/JPY",
+    "CAD/JPY",
+    "EUR/GBP",
+    "GBP/USD",
 )
+
+_OTC_SYMBOLS = (
+    "AED/CNY OTC",
+    "AUD/CAD OTC",
+    "AUD/NZD OTC",
+    "AUD/USD OTC",
+    "BHD/CNY OTC",
+    "CAD/CHF OTC",
+    "CAD/JPY OTC",
+    "CHF/JPY OTC",
+    "CHF/NOK OTC",
+    "EUR/CHF OTC",
+    "EUR/NZD OTC",
+    "EUR/TRY OTC",
+    "JOD/CNY OTC",
+    "KES/USD OTC",
+    "NZD/USD OTC",
+    "OMR/CNY OTC",
+    "SAR/CNY OTC",
+    "UAH/USD OTC",
+    "USD/ARS OTC",
+    "USD/BRL OTC",
+    "USD/DZD OTC",
+    "USD/EGP OTC",
+    "USD/INR OTC",
+    "USD/MXN OTC",
+    "USD/MYR OTC",
+    "USD/PKR OTC",
+    "USD/VND OTC",
+    "ZAR/USD OTC",
+    "EUR/USD OTC",
+    "MAD/USD OTC",
+    "EUR/GBP OTC",
+    "EUR/RUB OTC",
+    "EUR/HUF OTC",
+    "EUR/JPY OTC",
+    "NGN/USD OTC",
+    "TND/USD OTC",
+    "USD/IDR OTC",
+    "QAR/CNY OTC",
+    "USD/CLP OTC",
+    "USD/SGD OTC",
+    "USD/PHP OTC",
+    "USD/BDT OTC",
+    "USD/CAD OTC",
+    "USD/CHF OTC",
+    "USD/THB OTC",
+    "AUD/JPY OTC",
+    "GBP/USD OTC",
+    "GBP/AUD OTC",
+    "USD/RUB OTC",
+    "USD/COP OTC",
+    "AUD/CHF OTC",
+    "USD/CNH OTC",
+    "USD/JPY OTC",
+    "GBP/JPY OTC",
+    "YER/USD OTC",
+    "NZD/JPY OTC",
+    "LBP/USD OTC",
+)
+
+
+def _pair_code(symbol: str, market_type: str) -> str:
+    base = symbol.replace(" OTC", "").replace("/", "").replace(" ", "").upper()
+    return f"{base}_OTC" if market_type == "OTC" else base
+
+
+def _pair_flags(symbol: str) -> tuple[str, str]:
+    base, quote = symbol.replace(" OTC", "").split("/", 1)
+    return _CURRENCY_FLAGS.get(base, ""), _CURRENCY_FLAGS.get(quote, "")
+
+
+def _build_pair_options(symbols: tuple[str, ...], *, market_type: str, category: str) -> tuple[MvpPairOption, ...]:
+    return tuple(
+        MvpPairOption(
+            code=_pair_code(symbol, market_type),
+            symbol=symbol,
+            flag_1=_pair_flags(symbol)[0],
+            flag_2=_pair_flags(symbol)[1],
+            market_type=market_type,
+            category=category,
+        )
+        for symbol in symbols
+    )
+
+
+MVP_FOREX_PAIR_OPTIONS = _build_pair_options(_FOREX_SYMBOLS, market_type="FOREX", category="forex")
+MVP_OTC_PAIR_OPTIONS = _build_pair_options(_OTC_SYMBOLS, market_type="OTC", category="otc")
+MVP_PAIR_OPTIONS = MVP_FOREX_PAIR_OPTIONS + MVP_OTC_PAIR_OPTIONS
 MVP_PAIR_BY_CODE = {option.code: option for option in MVP_PAIR_OPTIONS}
 
 
@@ -67,7 +202,19 @@ class TradingMvpConfigError(RuntimeError):
     pass
 
 
-def get_mvp_pair_options() -> tuple[MvpPairOption, ...]:
+def normalize_mvp_market_mode(value: str | None) -> str:
+    market_mode = (value or MVP_DEFAULT_MARKET_MODE).strip().upper()
+    if market_mode not in MVP_MARKET_MODES:
+        raise ValueError(f"Unsupported MVP market mode: {value}")
+    return market_mode
+
+
+def get_mvp_pair_options(market_mode: str | None = None) -> tuple[MvpPairOption, ...]:
+    normalized_market_mode = normalize_mvp_market_mode(market_mode)
+    if normalized_market_mode == "FOREX":
+        return MVP_FOREX_PAIR_OPTIONS
+    if normalized_market_mode == "OTC":
+        return MVP_OTC_PAIR_OPTIONS
     return MVP_PAIR_OPTIONS
 
 
@@ -92,6 +239,69 @@ def _decimal_or_none(value: float | int | str | None) -> Decimal | None:
         return Decimal(str(value))
     except Exception:
         return None
+
+
+def _payout_percent_or_none(value: object) -> Decimal | None:
+    if isinstance(value, dict):
+        for key in ("payout", "payout_percent", "profit", "profit_percent", "percent", "value"):
+            payout = _payout_percent_or_none(value.get(key))
+            if payout is not None:
+                return payout
+        return None
+
+    payout = _decimal_or_none(value)  # type: ignore[arg-type]
+    if payout is None:
+        return None
+    if Decimal("0") < payout <= Decimal("1"):
+        payout *= Decimal("100")
+    return payout
+
+
+def _pair_match_key(value: str) -> str:
+    return "".join(character for character in value.upper() if character.isalnum())
+
+
+def _instrument_matches_pair(instrument: dict, pair: MvpPairOption) -> bool:
+    target_keys = {_pair_match_key(pair.symbol), _pair_match_key(pair.code)}
+    for key in ("symbol", "name", "pair", "ticker", "asset", "label", "title", "display_name"):
+        value = instrument.get(key)
+        if isinstance(value, str) and _pair_match_key(value) in target_keys:
+            return True
+    return False
+
+
+def _instrument_payout(instrument: dict) -> Decimal | None:
+    for key in (
+        "payout",
+        "payout_percent",
+        "profit",
+        "profit_percent",
+        "return",
+        "return_percent",
+        "percent",
+        "percentage",
+    ):
+        payout = _payout_percent_or_none(instrument.get(key))
+        if payout is not None:
+            return payout
+    return None
+
+
+def _pair_payout_from_devsbite(pair: MvpPairOption) -> Decimal:
+    payload = get_pairs(pair.market_type.lower(), min_payout=0)
+    for instrument in extract_instruments(payload):
+        if not _instrument_matches_pair(instrument, pair):
+            continue
+        payout = _instrument_payout(instrument)
+        if payout is None:
+            raise TradingMvpConfigError(f"Devsbite pair {pair.symbol} has no payout field")
+        if payout < Decimal(str(MVP_MIN_PAYOUT)):
+            raise TradingMvpConfigError(
+                f"Pair {pair.symbol} payout is {payout}% but minimum is {MVP_MIN_PAYOUT}%"
+            )
+        return payout
+
+    raise TradingMvpConfigError(f"Pair {pair.symbol} was not found in Devsbite pairs")
 
 
 def _confidence_from_payload(payload: dict) -> Decimal:
@@ -127,10 +337,11 @@ def preview_mvp_trading_signal(pair: MvpPairOption, expiry_minutes: int) -> dict
     if expiry_minutes not in MVP_EXPIRY_MINUTE_OPTIONS:
         raise ValueError(f"Unsupported MVP expiry: {expiry_minutes}")
 
-    quote_payload = get_quote(MVP_CATEGORY, pair.symbol, history_seconds=300)
+    quote_payload = get_quote(pair.category, pair.symbol, history_seconds=300)
     analysis_payload = get_combined_analysis(pair.symbol, expiry_minutes)
     direction = _direction_from_payload(analysis_payload)
     confidence = _confidence_from_payload(analysis_payload)
+    payout = _pair_payout_from_devsbite(pair)
     current_price = _entry_price_from_payload(quote_payload, analysis_payload)
 
     return {
@@ -141,6 +352,7 @@ def preview_mvp_trading_signal(pair: MvpPairOption, expiry_minutes: int) -> dict
         "analysis": analysis_payload,
         "direction": direction,
         "confidence": confidence,
+        "payout": payout,
         "entry_price": current_price,
     }
 
@@ -192,17 +404,87 @@ def cancel_open_channel_sessions(db: Session, channel_id: int) -> int:
     return len(open_sessions)
 
 
+def cancel_trading_session(
+    db: Session,
+    session_id: int,
+    *,
+    reason: str,
+    allowed_statuses: tuple[str, ...] = ACTIVE_SESSION_STATUSES,
+) -> TradingSession:
+    trading_session = db.query(TradingSession).filter(TradingSession.id == session_id).first()
+    if trading_session is None:
+        raise TradingMvpConfigError(f"Trading session #{session_id} was not found.")
+
+    if trading_session.status not in allowed_statuses:
+        allowed = ", ".join(allowed_statuses)
+        raise TradingMvpConfigError(
+            f"Trading session #{session_id} has status '{trading_session.status}', expected: {allowed}."
+        )
+
+    now = datetime.utcnow()
+    trading_session.status = "cancelled"
+    trading_session.updated_at = now
+    note = f"{now.isoformat(timespec='seconds')} UTC: {reason}"
+    trading_session.notes = f"{trading_session.notes}\n{note}".strip() if trading_session.notes else note
+
+    signal_ids = [
+        signal_id
+        for (signal_id,) in db.query(TradingSignal.id)
+        .filter(TradingSignal.session_id == trading_session.id)
+        .all()
+    ]
+
+    db.query(TradingSignal).filter(
+        TradingSignal.session_id == trading_session.id,
+        TradingSignal.status != "finished",
+    ).update(
+        {"status": "cancelled", "updated_at": now},
+        synchronize_session=False,
+    )
+
+    if signal_ids:
+        db.query(TradingSignalAttempt).filter(
+            TradingSignalAttempt.signal_id.in_(signal_ids),
+            TradingSignalAttempt.status != "finished",
+        ).update(
+            {"status": "cancelled", "updated_at": now},
+            synchronize_session=False,
+        )
+
+    db.query(TradingSignalJob).filter(
+        TradingSignalJob.session_id == trading_session.id,
+        TradingSignalJob.status.in_(OPEN_JOB_STATUSES),
+    ).update(
+        {
+            "status": "cancelled",
+            "last_error": reason,
+            "lock_token": "",
+            "locked_at": None,
+            "updated_at": now,
+        },
+        synchronize_session=False,
+    )
+
+    db.commit()
+    db.refresh(trading_session)
+    return trading_session
+
+
 def create_mvp_trading_session(
     db: Session,
     *,
     created_by_telegram_id: int | None = None,
     start_at: datetime | None = None,
     pair: MvpPairOption | None = None,
+    market_mode: str = MVP_DEFAULT_MARKET_MODE,
     expiry_minutes: int = MVP_EXPIRY_MINUTES,
     preview: dict | None = None,
 ) -> TradingSession:
     now = datetime.utcnow()
-    pair = pair or MVP_PAIR_BY_CODE["EURUSD"]
+    market_mode = normalize_mvp_market_mode(market_mode)
+    pair = pair or get_mvp_pair_options(market_mode)[0]
+    if pair not in get_mvp_pair_options(market_mode):
+        raise ValueError(f"Pair {pair.symbol} is not allowed for market mode {market_mode}")
     expiry_seconds = expiry_minutes * 60
     session_start = start_at or now + timedelta(minutes=MVP_SESSION_START_DELAY_MINUTES)
     session_end = session_start + timedelta(minutes=MVP_SESSION_DURATION_MINUTES)
@@ -217,11 +499,12 @@ def create_mvp_trading_session(
     analysis_payload = preview["analysis"]
     direction = preview["direction"]
     confidence = preview["confidence"]
+    payout = preview["payout"]
     current_price = preview["entry_price"]
 
     trading_session = TradingSession(
         channel_id=channel_id,
-        market_mode=MVP_MARKET_MODE,
+        market_mode=market_mode,
         status="scheduled",
         starts_at=session_start,
         ends_at=session_end,
@@ -231,7 +514,7 @@ def create_mvp_trading_session(
         min_payout=MVP_MIN_PAYOUT,
         min_confidence=MVP_MIN_CONFIDENCE,
         created_by_telegram_id=created_by_telegram_id,
-        notes="MVP hardcoded session",
+        notes=f"MVP {market_mode} admin selected session",
     )
     db.add(trading_session)
     db.flush()
@@ -240,8 +523,8 @@ def create_mvp_trading_session(
         session_id=trading_session.id,
         channel_id=channel_id,
         status="planned",
-        market_type=MVP_MARKET_MODE,
-        category=MVP_CATEGORY,
+        market_type=pair.market_type,
+        category=pair.category,
         symbol=pair.symbol,
         flag_1=pair.flag_1,
         flag_2=pair.flag_2,
@@ -249,16 +532,18 @@ def create_mvp_trading_session(
         direction_source=str(analysis_payload.get("decision_source") or analysis_payload.get("mode") or "devsbite"),
         decision_reason=str(analysis_payload.get("decision_reason") or analysis_payload.get("reason") or ""),
         confidence=confidence,
-        payout=Decimal(str(MVP_MIN_PAYOUT)),
+        payout=payout,
         expiry_seconds=expiry_seconds,
         entry_time=entry_time,
         close_time=close_time,
         max_attempts=MVP_MAX_OVERLAPS + 1,
         source_payload={
             "mode": "mvp_admin_selected",
+            "market_mode": market_mode,
             "created_price": str(current_price) if current_price is not None else None,
             "pair_code": pair.code,
             "expiry_minutes": expiry_minutes,
+            "payout": str(payout),
             "quote": quote_payload,
             "analysis": analysis_payload,
         },
@@ -332,6 +617,7 @@ def format_mvp_session_summary(session: TradingSession) -> str:
     signal = session.signals[0] if session.signals else None
     direction = signal.direction if signal is not None else "-"
     confidence = signal.confidence if signal is not None else "-"
+    payout = signal.payout if signal is not None else "-"
     symbol = signal.symbol if signal is not None else "-"
     source_payload = signal.source_payload if signal is not None and isinstance(signal.source_payload, dict) else {}
     price = source_payload.get("created_price") or "-"
@@ -343,9 +629,10 @@ def format_mvp_session_summary(session: TradingSession) -> str:
         f"Symbol: <b>{symbol}</b>\n"
         f"Direction: <b>{direction}</b>\n"
         f"Confidence: <b>{confidence}%</b>\n"
+        f"Payout: <b>{payout}%</b>\n"
         f"Entry price: <code>{price}</code>\n"
-        f"Start: <code>{session.starts_at.isoformat(sep=' ', timespec='seconds')} UTC</code>\n"
-        f"End: <code>{session.ends_at.isoformat(sep=' ', timespec='seconds')} UTC</code>\n"
+        f"Start: <code>{format_signal_time(session.starts_at)} MSK</code>\n"
+        f"End: <code>{format_signal_time(session.ends_at)} MSK</code>\n"
         f"Expiry: <b>{session.expiry_seconds}s</b>\n"
         f"Jobs: <b>5</b>"
     )

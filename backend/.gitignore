@@ -16,6 +16,7 @@ htmlcov/
 *.egg-info/
 build/
 dist/
+docs/
 
 *.db
 *.db-journal

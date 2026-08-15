@@ -11,6 +11,13 @@ from app.database import SessionLocal
 from app.models.trading import TradingSession, TradingSignal, TradingSignalAttempt, TradingSignalJob
 from app.services.devsbite import extract_latest_price, get_quote
 from app.services.trading_chart_renderer import TradeChartData, render_trade_result_chart
+from app.services.trading_mvp import (
+    MVP_MAX_OVERLAPS,
+    MVP_SIGNAL_COUNTDOWN_SECONDS,
+    TradingMvpConfigError,
+    get_mvp_pair_option,
+    preview_mvp_trading_signal,
+)
 from app.telegram.channel_signals import (
     SignalAsset,
     SignalEntry,
@@ -27,6 +34,8 @@ TRADING_SIGNAL_WORKER_POLL_SECONDS = 10
 TRADING_SIGNAL_WORKER_BATCH_SIZE = 10
 TRADING_SIGNAL_WORKER_MAX_ATTEMPTS = 3
 TRADING_SIGNAL_WORKER_RETRY_SECONDS = 60
+TRADING_SIGNAL_NEXT_SERIES_DELAY_SECONDS = 60
+TRADING_SIGNAL_SEARCH_RETRY_SECONDS = 120
 OPEN_JOB_STATUSES = ("scheduled", "processing")
 
 _worker_lock = threading.Lock()
@@ -56,6 +65,78 @@ def _signal_asset(signal: TradingSignal) -> SignalAsset:
     )
 
 
+def _signal_payload(signal: TradingSignal | None) -> dict:
+    if signal is None or not isinstance(signal.source_payload, dict):
+        return {}
+    return signal.source_payload
+
+
+def _signal_pair_code(signal: TradingSignal | None) -> str:
+    payload = _signal_payload(signal)
+    value = payload.get("pair_code")
+    return str(value or "")
+
+
+def _signal_expiry_minutes(signal: TradingSignal | None, fallback_seconds: int | None = None) -> int:
+    payload = _signal_payload(signal)
+    value = payload.get("expiry_minutes")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return max(1, int((fallback_seconds or 60) / 60))
+
+
+def _session_has_time_for_signal(session: TradingSession, entry_time: datetime, expiry_seconds: int) -> bool:
+    return entry_time + timedelta(seconds=expiry_seconds) < session.ends_at
+
+
+def _schedule_find_signal(
+    db: Session,
+    session: TradingSession,
+    signal: TradingSignal | None,
+    *,
+    pair_code: str | None = None,
+    expiry_minutes: int | None = None,
+    run_at: datetime | None = None,
+) -> None:
+    if session.status in {"cancelled", "finished"}:
+        return
+
+    pair_code = pair_code or _signal_pair_code(signal)
+    if not pair_code:
+        print(f"trading_signal_search_not_scheduled session_id={session.id} reason=missing_pair_code")
+        return
+
+    expiry_minutes = expiry_minutes or _signal_expiry_minutes(signal, session.expiry_seconds)
+    run_at = run_at or datetime.utcnow() + timedelta(seconds=TRADING_SIGNAL_SEARCH_RETRY_SECONDS)
+    entry_time = run_at + timedelta(seconds=MVP_SIGNAL_COUNTDOWN_SECONDS)
+    expiry_seconds = expiry_minutes * 60
+    if not _session_has_time_for_signal(session, entry_time, expiry_seconds):
+        print(
+            "trading_signal_search_not_scheduled "
+            f"session_id={session.id} reason=session_end run_at={run_at.isoformat()}"
+        )
+        return
+
+    db.add(
+        TradingSignalJob(
+            session_id=session.id,
+            kind="FIND_SIGNAL",
+            status="scheduled",
+            run_at=run_at,
+            payload={
+                "pair_code": pair_code,
+                "expiry_minutes": expiry_minutes,
+                "market_mode": session.market_mode,
+            },
+        )
+    )
+    print(
+        "trading_signal_search_scheduled "
+        f"session_id={session.id} pair_code={pair_code} run_at={run_at.isoformat()}"
+    )
+
+
 def _signal_entry(signal: TradingSignal, attempt: TradingSignalAttempt | None = None) -> SignalEntry:
     entry_source = attempt or signal
     return SignalEntry(
@@ -67,8 +148,13 @@ def _signal_entry(signal: TradingSignal, attempt: TradingSignalAttempt | None = 
     )
 
 
-def _latest_price(signal: TradingSignal) -> tuple[Decimal, dict]:
-    payload = get_quote(signal.category, signal.symbol, history_seconds=300)
+def _history_window_seconds(signal: TradingSignal) -> int:
+    expiry_seconds = signal.expiry_seconds or 0
+    return max(60, expiry_seconds)
+
+
+def _latest_price(signal: TradingSignal, *, history_seconds: int | None = 300) -> tuple[Decimal, dict]:
+    payload = get_quote(signal.category, signal.symbol, history_seconds=history_seconds)
     price = _decimal_or_none(extract_latest_price(payload))
     if price is None:
         raise RuntimeError("Devsbite returned quote without price")
@@ -273,7 +359,7 @@ def _execute_signal_result(db: Session, client: httpx.Client, job: TradingSignal
     if entry_price is None:
         raise RuntimeError("SIGNAL_RESULT job has no entry price")
 
-    close_price, quote_payload = _latest_price(signal)
+    close_price, quote_payload = _latest_price(signal, history_seconds=_history_window_seconds(signal))
     direction = signal.direction if signal.direction in {"BUY", "SELL"} else "BUY"
     result = "WIN" if _is_win(direction, entry_price, close_price) else "LOSS"
 
@@ -363,6 +449,163 @@ def _execute_signal_result(db: Session, client: httpx.Client, job: TradingSignal
         session.wins += 1
     else:
         session.losses += 1
+    _schedule_find_signal(
+        db,
+        session,
+        signal,
+        run_at=datetime.utcnow() + timedelta(seconds=TRADING_SIGNAL_NEXT_SERIES_DELAY_SECONDS),
+    )
+    db.flush()
+
+
+def _execute_find_signal(db: Session, client: httpx.Client, job: TradingSignalJob) -> None:
+    session = job.session
+    if session is None:
+        raise RuntimeError("FIND_SIGNAL job has no session")
+
+    now = datetime.utcnow()
+    payload = job.payload or {}
+    pair_code = str(payload.get("pair_code") or "")
+    expiry_minutes = int(payload.get("expiry_minutes") or max(1, session.expiry_seconds // 60))
+    pair = get_mvp_pair_option(pair_code)
+    expiry_seconds = expiry_minutes * 60
+    entry_time = now + timedelta(seconds=MVP_SIGNAL_COUNTDOWN_SECONDS)
+    close_time = entry_time + timedelta(seconds=expiry_seconds)
+
+    if not _session_has_time_for_signal(session, entry_time, expiry_seconds):
+        print(
+            "trading_signal_search_stopped "
+            f"session_id={session.id} pair={pair.symbol} reason=session_end"
+        )
+        return
+
+    try:
+        preview = preview_mvp_trading_signal(pair, expiry_minutes)
+    except TradingMvpConfigError as error:
+        retry_at = now + timedelta(seconds=TRADING_SIGNAL_SEARCH_RETRY_SECONDS)
+        print(
+            "trading_signal_search_retry "
+            f"session_id={session.id} pair={pair.symbol} reason=config_or_api detail={error} "
+            f"next_run={retry_at.isoformat()}"
+        )
+        _schedule_find_signal(
+            db,
+            session,
+            None,
+            pair_code=pair.code,
+            expiry_minutes=expiry_minutes,
+            run_at=retry_at,
+        )
+        return
+
+    analysis_payload = preview["analysis"]
+    confidence = preview["confidence"]
+    min_confidence = Decimal(str(session.min_confidence or 0))
+    api_signal = str(analysis_payload.get("signal") or "").upper()
+    if api_signal == "NO_TRADE" or confidence < min_confidence:
+        retry_at = now + timedelta(seconds=TRADING_SIGNAL_SEARCH_RETRY_SECONDS)
+        print(
+            "trading_signal_search_no_trade "
+            f"session_id={session.id} pair={pair.symbol} api_signal={api_signal or '-'} "
+            f"confidence={confidence} min_confidence={min_confidence} next_run={retry_at.isoformat()}"
+        )
+        _schedule_find_signal(
+            db,
+            session,
+            None,
+            pair_code=pair.code,
+            expiry_minutes=expiry_minutes,
+            run_at=retry_at,
+        )
+        return
+
+    quote_payload = preview["quote"]
+    direction = preview["direction"]
+    payout = preview["payout"]
+    current_price = preview["entry_price"]
+
+    signal = TradingSignal(
+        session_id=session.id,
+        channel_id=session.channel_id,
+        status="planned",
+        market_type=pair.market_type,
+        category=pair.category,
+        symbol=pair.symbol,
+        flag_1=pair.flag_1,
+        flag_2=pair.flag_2,
+        direction=direction,
+        direction_source=str(analysis_payload.get("decision_source") or analysis_payload.get("mode") or "devsbite"),
+        decision_reason=str(analysis_payload.get("decision_reason") or analysis_payload.get("reason") or ""),
+        confidence=confidence,
+        payout=payout,
+        expiry_seconds=expiry_seconds,
+        entry_time=entry_time,
+        close_time=close_time,
+        max_attempts=MVP_MAX_OVERLAPS + 1,
+        source_payload={
+            "mode": "mvp_continuation",
+            "market_mode": session.market_mode,
+            "created_price": str(current_price) if current_price is not None else None,
+            "pair_code": pair.code,
+            "expiry_minutes": expiry_minutes,
+            "payout": str(payout),
+            "quote": quote_payload,
+            "analysis": analysis_payload,
+        },
+    )
+    db.add(signal)
+    db.flush()
+
+    attempt = TradingSignalAttempt(
+        signal_id=signal.id,
+        attempt_no=0,
+        kind="base",
+        status="planned",
+        direction=direction,
+        expiry_seconds=expiry_seconds,
+        entry_time=entry_time,
+        close_time=close_time,
+        quote_snapshot=quote_payload,
+    )
+    db.add(attempt)
+    db.flush()
+
+    db.add_all(
+        [
+            TradingSignalJob(
+                session_id=session.id,
+                signal_id=signal.id,
+                kind="SIGNAL_COUNTDOWN",
+                status="scheduled",
+                run_at=max(now, entry_time - timedelta(seconds=MVP_SIGNAL_COUNTDOWN_SECONDS)),
+                payload={"seconds_before": MVP_SIGNAL_COUNTDOWN_SECONDS},
+            ),
+            TradingSignalJob(
+                session_id=session.id,
+                signal_id=signal.id,
+                attempt_id=attempt.id,
+                kind="SIGNAL_ENTRY",
+                status="scheduled",
+                run_at=entry_time,
+                payload={},
+            ),
+            TradingSignalJob(
+                session_id=session.id,
+                signal_id=signal.id,
+                attempt_id=attempt.id,
+                kind="SIGNAL_RESULT",
+                status="scheduled",
+                run_at=close_time,
+                payload={},
+            ),
+        ]
+    )
+    _mark_session_running(session)
+    print(
+        "trading_signal_created_from_search "
+        f"session_id={session.id} signal_id={signal.id} pair={pair.symbol} "
+        f"direction={direction} confidence={confidence} entry_time={entry_time.isoformat()}"
+    )
     db.flush()
 
 
@@ -396,6 +639,8 @@ def _execute_job(db: Session, client: httpx.Client, job: TradingSignalJob) -> No
         _execute_signal_entry(db, client, job)
     elif job.kind == "SIGNAL_RESULT":
         _execute_signal_result(db, client, job)
+    elif job.kind == "FIND_SIGNAL":
+        _execute_find_signal(db, client, job)
     elif job.kind == "SESSION_FINISHED":
         _execute_session_finished(db, client, job)
     else:
@@ -424,6 +669,11 @@ def _claim_job(db: Session, job_id: int, lock_token: str) -> TradingSignalJob | 
 
 
 def _finish_job(db: Session, job: TradingSignalJob) -> None:
+    current_status = db.query(TradingSignalJob.status).filter(TradingSignalJob.id == job.id).scalar()
+    if current_status == "cancelled":
+        db.commit()
+        return
+
     job.status = "done"
     job.last_error = ""
     job.updated_at = datetime.utcnow()

@@ -23,6 +23,8 @@
 **/*.egg-info/
 **/build/
 **/dist/
+**/docs/
+/docs
 
 # Local databases and parser debug snapshots.
 **/*.db

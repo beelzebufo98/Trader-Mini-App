@@ -1,11 +1,13 @@
 from dataclasses import dataclass
 from datetime import datetime
+from html import escape
 from pathlib import Path
 from typing import Literal
 
 import httpx
 
 from app.config import settings
+from app.services.signal_time import format_signal_time
 from app.telegram.client import send_message, send_photo
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -52,11 +54,11 @@ def signals_channel_id() -> int:
 
 
 def format_time(value: datetime) -> str:
-    return value.strftime("%H:%M:%S")
+    return format_signal_time(value)
 
 
 def format_session_time(value: datetime) -> str:
-    return value.strftime("%H:%M")
+    return format_signal_time(value, seconds=False)
 
 
 def format_expiry(seconds: int) -> str:
@@ -76,21 +78,39 @@ def format_price(price: float | None) -> str:
     return f"{price:.6f}".rstrip("0").rstrip(".")
 
 
-def asset_line(asset: SignalAsset) -> str:
-    flags = " ".join(part for part in [asset.flag_1, asset.symbol, asset.flag_2] if part)
-    return flags or asset.symbol
+def market_label(asset_or_market: SignalAsset | str) -> str:
+    value = asset_or_market.market_type if isinstance(asset_or_market, SignalAsset) else asset_or_market
+    return (value or "FOREX").strip().upper()
+
+
+def display_symbol(asset: SignalAsset) -> str:
+    symbol = asset.symbol.strip()
+    market = market_label(asset)
+    if market == "OTC" and symbol.upper().endswith(" OTC"):
+        return symbol[:-4].strip()
+    if market != "OTC" and symbol.upper().endswith(f" {market}"):
+        return symbol[: -len(market)].strip()
+    return symbol
 
 
 def market_symbol(asset: SignalAsset) -> str:
-    market = asset.market_type.upper()
-    symbol = asset.symbol.strip()
-    if symbol.upper().endswith(f" {market}"):
-        return symbol
-    return f"{symbol} {market}".strip()
+    return f"{display_symbol(asset)} {market_label(asset)}".strip()
+
+
+def asset_line(asset: SignalAsset) -> str:
+    return " ".join(part for part in [asset.flag_1, display_symbol(asset), asset.flag_2] if part)
 
 
 def asset_market_line(asset: SignalAsset) -> str:
-    return f"{asset_line(asset)} {asset.market_type.upper()}".replace(" OTC OTC", " OTC")
+    return f"{asset_line(asset)} · {market_label(asset)}"
+
+
+def direction_label(direction: SignalDirection) -> str:
+    return "Купить (BUY)" if direction == "BUY" else "Продать (SELL)"
+
+
+def direction_emoji(direction: SignalDirection) -> str:
+    return "🟢" if direction == "BUY" else "🔴"
 
 
 def image_path(name: str) -> Path | None:
@@ -128,12 +148,13 @@ def send_session_soon(
     session_start_time: datetime,
     minutes_before: int = 60,
 ) -> int | None:
+    market = escape(market_label(market_type))
     text = (
-        f"🚨 <b>ТОРГОВАЯ СЕССИЯ ЧЕРЕЗ {minutes_before} МИНУТ</b> 🚨\n"
-        f"{market_type.upper()} · старт в <b>{format_session_time(session_start_time)}</b>\n"
+        f"🚨 <b>ТОРГОВАЯ СЕССИЯ ЧЕРЕЗ {minutes_before} МИНУТ</b> 🚨\n\n"
+        f"{market} · старт в <b>{format_session_time(session_start_time)}</b>\n\n"
         "🎯 Проверьте заранее:\n"
         "— баланс для торговли 💵\n"
-        "— стабильное соединение 📶\n"
+        "— стабильное соединение 📶\n\n"
         "Готовьтесь — скоро начинаем! 🔥"
     )
     return send_channel_html(client, text, photo_path=image_path("1-HOUR-SESSION.png"))
@@ -148,30 +169,25 @@ def send_signal_countdown(
     seconds_before: int = 60,
 ) -> int | None:
     text = (
-        f"⌛ До нового сигнала осталось <b>{seconds_before} секунд</b>\n"
-        f"💱 Актив: {asset_market_line(asset)}\n"
+        f"⏳ До нового сигнала осталось <b>{seconds_before} секунд</b>\n\n"
+        f"💱 Актив: {escape(asset_market_line(asset))}\n"
         f"🕘 Время входа: <b>{format_time(entry_time)}</b>\n"
-        f"⏱ Экспирация: <b>{format_expiry(expiry_seconds)}</b>\n"
+        f"⏱ Экспирация: <b>{format_expiry(expiry_seconds)}</b>\n\n"
         "⚠️ Подготовьте терминал. Направление сделки будет опубликовано через 60 секунд."
     )
     return send_channel_html(client, text)
 
 
 def send_signal_entry(client: httpx.Client, signal: SignalEntry) -> int | None:
-    is_buy = signal.direction == "BUY"
-    action_ru = "Купить"
-    if not is_buy:
-        action_ru = "Продать"
-    direction_emoji = "🟢" if is_buy else "🔴"
     text = (
-        f"⚡ <b>СИГНАЛ ПО {market_symbol(signal.asset)}</b>\n"
-        f"{asset_market_line(signal.asset)}\n"
+        f"⚡ <b>СИГНАЛ ПО {escape(market_symbol(signal.asset))}</b>\n\n"
+        f"{escape(asset_market_line(signal.asset))}\n"
         f"🕘 Время входа: <b>{format_time(signal.entry_time)}</b>\n"
         f"⏱ Экспирация: <b>{format_expiry(signal.expiry_seconds)}</b>\n"
-        f"{direction_emoji} <b>{action_ru} ({signal.direction})</b>\n"
+        f"{direction_emoji(signal.direction)} <b>{direction_label(signal.direction)}</b>\n"
         f"💲 Цена входа: <b>{format_price(signal.entry_price)}</b>"
     )
-    photo_name = "SESSION-BUY.png" if is_buy else "SESSION-SELL.jpg"
+    photo_name = "SESSION-BUY.png" if signal.direction == "BUY" else "SESSION-SELL.jpg"
     return send_channel_html(client, text, photo_path=image_path(photo_name))
 
 
@@ -190,24 +206,23 @@ def send_overlap(
     else:
         title = "Третье перекрытие закрылось в минус."
         overlap = "ТРЕТЬЕ ПЕРЕКРЫТИЕ"
-    direction_emoji = "🟢" if signal.direction == "BUY" else "🔴"
-    action_ru = "Купить" if signal.direction == "BUY" else "Продать"
+
     text = (
         f"❌ {title}\n"
-        f"🔄 <b>{overlap}</b>\n"
-        f"{asset_market_line(signal.asset)}\n"
+        f"🔄 <b>{overlap}</b>\n\n"
+        f"{escape(asset_market_line(signal.asset))}\n"
         f"🕘 Новый вход: <b>{format_time(signal.entry_time)}</b>\n"
         f"⏱ Экспирация: <b>{format_expiry(signal.expiry_seconds)}</b>\n"
         f"💲 Цена входа: <b>{format_price(signal.entry_price)}</b>\n"
-        f"{direction_emoji} <b>{action_ru} ({signal.direction})</b>"
+        f"{direction_emoji(signal.direction)} <b>{direction_label(signal.direction)}</b>"
     )
     return send_channel_html(client, text)
 
 
 def send_refund(client: httpx.Client, signal: SignalEntry) -> int | None:
     text = (
-        "🔄 <b>Возврат средств</b>\n"
-        f"{asset_market_line(signal.asset)}\n"
+        "🔄 <b>Возврат средств</b>\n\n"
+        f"{escape(asset_market_line(signal.asset))}\n\n"
         "Фиксируем возврат и повторяем вход без повышения уровня."
     )
     return send_channel_html(client, text)
@@ -216,15 +231,15 @@ def send_refund(client: httpx.Client, signal: SignalEntry) -> int | None:
 def send_signal_result(client: httpx.Client, outcome: SignalOutcome) -> int | None:
     if outcome.result == "WIN":
         text = (
-            "✅ <b>СИГНАЛ ОТРАБОТАН В ПЛЮС</b>\n"
-            f"{asset_market_line(outcome.asset)}\n"
-            f"{'🟢' if outcome.direction == 'BUY' else '🔴'} <b>{outcome.direction}</b>\n"
+            "✅ <b>СИГНАЛ ОТРАБОТАН В ПЛЮС</b>\n\n"
+            f"{escape(asset_market_line(outcome.asset))}\n"
+            f"{direction_emoji(outcome.direction)} <b>{outcome.direction}</b>\n"
             "💸 Сделка успешно закрылась в прибыль."
         )
     else:
         text = (
-            "❌ <b>Серия закрыта в минус</b>\n"
-            f"{asset_market_line(outcome.asset)} — все уровни отработаны.\n"
+            "❌ <b>Серия закрыта в минус</b>\n\n"
+            f"{escape(asset_market_line(outcome.asset))} — все уровни отработаны.\n"
             "Фиксируем результат, идём дальше."
         )
 
@@ -241,9 +256,10 @@ def send_session_finished(
     wins: int,
     losses: int,
 ) -> int | None:
+    market = escape(market_label(market_type))
     text = (
-        "🌙 <b>ТОРГОВАЯ СЕССИЯ ЗАВЕРШЕНА</b>\n"
-        f"{format_session_time(session_start_time)}–{format_session_time(session_end_time)} · {market_type.upper()}\n"
+        "🌙 <b>ТОРГОВАЯ СЕССИЯ ЗАВЕРШЕНА</b>\n\n"
+        f"{format_session_time(session_start_time)}–{format_session_time(session_end_time)} · {market}\n\n"
         f"📊 Отработано сигналов: <b>{total_series}</b>\n"
         f"✅ Плюсы: <b>{wins}</b>\n"
         f"❌ Минусы: <b>{losses}</b>"

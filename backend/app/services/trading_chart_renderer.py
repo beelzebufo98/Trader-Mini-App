@@ -9,6 +9,8 @@ from uuid import uuid4
 
 from PIL import Image, ImageDraw, ImageFont
 
+from app.services.signal_time import format_signal_time
+
 
 @dataclass(frozen=True)
 class TradeChartData:
@@ -46,17 +48,8 @@ def _extract_history_prices(payload: dict[str, Any] | None) -> list[float]:
     if not isinstance(payload, dict):
         return []
 
-    containers = [
-        payload.get("history"),
-        payload.get("prices"),
-        payload.get("data"),
-        payload.get("candles"),
-        payload.get("quotes"),
-    ]
-    prices: list[float] = []
-    for container in containers:
-        if not isinstance(container, list):
-            continue
+    def prices_from_list(container: list[Any]) -> list[float]:
+        prices: list[float] = []
         for item in container:
             value: Any = item
             if isinstance(item, dict):
@@ -72,8 +65,27 @@ def _extract_history_prices(payload: dict[str, Any] | None) -> list[float]:
                 prices.append(float(value))
             except (TypeError, ValueError):
                 continue
-        if prices:
-            return prices
+        return prices
+
+    def walk(value: Any) -> list[float]:
+        if isinstance(value, list):
+            prices = prices_from_list(value)
+            if prices:
+                return prices
+            for item in value:
+                nested = walk(item)
+                if nested:
+                    return nested
+        if isinstance(value, dict):
+            for key in ("history", "prices", "data", "candles", "quotes", "items", "values"):
+                nested = walk(value.get(key))
+                if nested:
+                    return nested
+        return []
+
+    prices = walk(payload)
+    if prices:
+        return prices
 
     return []
 
@@ -103,6 +115,14 @@ def _price(value: float) -> str:
     return f"{value:.6f}".rstrip("0").rstrip(".")
 
 
+def _directional_points(data: TradeChartData) -> int:
+    if data.direction == "SELL":
+        difference = data.entry_price - data.close_price
+    else:
+        difference = data.close_price - data.entry_price
+    return int(round(difference * 1_000_000))
+
+
 def render_trade_result_chart(data: TradeChartData) -> Path:
     is_win = data.result == "WIN"
     is_buy = data.direction == "BUY"
@@ -121,29 +141,30 @@ def render_trade_result_chart(data: TradeChartData) -> Path:
     small_font = _font(28)
     tiny_font = _font(24)
 
-    asset = " ".join(part for part in [data.flag_1, data.symbol, data.flag_2, data.market_type] if part)
     trade_amount = data.trade_amount
     win_profit = trade_amount * (data.payout_percent / 100)
     payout = trade_amount + win_profit if is_win else 0
     profit = win_profit if is_win else -trade_amount
+    entry_time = format_signal_time(data.entry_time)
+    close_time = format_signal_time(data.close_time)
 
     draw.text((48, 42), f"☆ {data.symbol} +{data.payout_percent:.0f}%", fill=muted, font=title_font)
-    draw.text((1020, 42), data.close_time.strftime("%H:%M"), fill=text, font=title_font)
+    draw.text((1020, 42), format_signal_time(data.close_time, seconds=False), fill=text, font=title_font)
     draw.text((48, 112), f"{'↗' if is_buy else '↘'} {_money(trade_amount)}", fill=accent, font=body_font)
     draw.text((540, 112), _money(payout), fill=accent if is_win else muted, font=body_font, anchor="ma")
-    draw.text((1050, 112), f"{profit:+,}$", fill=accent if is_win else (240, 90, 90), font=body_font, anchor="ra")
+    draw.text((1050, 112), f"{profit:+,.0f}$", fill=accent if is_win else (240, 90, 90), font=body_font, anchor="ra")
 
     draw.rectangle((0, 190, 1200, 330), fill=(50, 56, 86))
-    draw.text((64, 225), f"Время открытия:\n{data.entry_time.strftime('%H:%M:%S')}.000", fill=text, font=small_font)
+    draw.text((64, 225), f"Время открытия:\n{entry_time}.000", fill=text, font=small_font)
     expiry_label = f"M{max(1, data.expiry_seconds // 60)}" if data.expiry_seconds >= 60 else f"{data.expiry_seconds}s"
     draw.text((600, 250), expiry_label, fill=text, font=body_font, anchor="mm")
-    draw.text((1136, 225), f"Время закрытия:\n{data.close_time.strftime('%H:%M:%S')}.000", fill=text, font=small_font, anchor="ra")
+    draw.text((1136, 225), f"Время закрытия:\n{close_time}.000", fill=text, font=small_font, anchor="ra")
 
     chart_x, chart_y, chart_w, chart_h = 78, 380, 1044, 310
     draw.rounded_rectangle((chart_x, chart_y, chart_x + chart_w, chart_y + chart_h), radius=14, fill=panel)
     draw.text((600, chart_y + 26), f"Ваш прогноз: {'КУПИТЬ' if is_buy else 'ПРОДАТЬ'}", fill=accent, font=small_font, anchor="ma")
     draw.text((310, chart_y + 78), f"Выплата: {_money(payout)}", fill=accent if is_win else muted, font=small_font, anchor="ma")
-    draw.text((760, chart_y + 78), f"Прибыль:{profit:+,}$", fill=accent if is_win else (240, 90, 90), font=small_font, anchor="ma")
+    draw.text((760, chart_y + 78), f"Прибыль:{profit:+,.0f}$", fill=accent if is_win else (240, 90, 90), font=small_font, anchor="ma")
 
     prices = _extract_history_prices(data.history_payload)
     if len(prices) < 2:
@@ -170,9 +191,14 @@ def render_trade_result_chart(data: TradeChartData) -> Path:
     draw.text((48, 735), f"Сделка: {uuid4()}", fill=text, font=small_font)
     draw.text((48, 800), f"Цена открытия:\n{_price(data.entry_price)}", fill=text, font=small_font)
     draw.text((560, 800), f"Цена закрытия:\n{_price(data.close_price)}", fill=text, font=small_font, anchor="ma")
-    difference = data.close_price - data.entry_price
-    points_diff = int(round(difference * 1000000))
-    draw.text((1130, 800), f"Разница:\n({points_diff:+} Пункты)", fill=accent if is_win else (240, 90, 90), font=small_font, anchor="ra")
+    points_diff = _directional_points(data)
+    draw.text(
+        (1130, 800),
+        f"Разница:\n({points_diff:+} пункты)",
+        fill=accent if is_win else (240, 90, 90),
+        font=small_font,
+        anchor="ra",
+    )
 
     output = Path(gettempdir()) / f"paradox_trade_result_{uuid4().hex}.png"
     image.save(output, format="PNG", optimize=True)
