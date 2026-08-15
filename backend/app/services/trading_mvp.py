@@ -18,10 +18,15 @@ MVP_MIN_PAYOUT = 80
 MVP_BASE_AMOUNT = Decimal("1000")
 MVP_MIN_CONFIDENCE = 40
 MVP_MAX_OVERLAPS = 3
+MVP_OVERLAP_MULTIPLIER = Decimal("2")
 MVP_SESSION_DURATION_MINUTES = 60
 MVP_SESSION_START_DELAY_MINUTES = 60
 MVP_SIGNAL_COUNTDOWN_SECONDS = 60
 MVP_EXPIRY_MINUTE_OPTIONS = (1, 3, 5, 15)
+MVP_EXPIRY_SECOND_OPTIONS = tuple(minutes * 60 for minutes in MVP_EXPIRY_MINUTE_OPTIONS)
+MVP_MAX_BASE_AMOUNT = Decimal("1000000")
+MVP_MAX_ALLOWED_OVERLAPS = 10
+MVP_MAX_OVERLAP_MULTIPLIER = Decimal("10")
 ACTIVE_SESSION_STATUSES = ("scheduled", "running")
 OPEN_JOB_STATUSES = ("scheduled", "processing")
 
@@ -241,6 +246,37 @@ def _decimal_or_none(value: float | int | str | None) -> Decimal | None:
         return None
 
 
+def _decimal_required(value: object, field_name: str) -> Decimal:
+    if isinstance(value, bool) or value is None:
+        raise TradingMvpConfigError(f"{field_name} must be a number")
+    try:
+        decimal_value = Decimal(str(value))
+    except Exception as error:
+        raise TradingMvpConfigError(f"{field_name} must be a number") from error
+    if not decimal_value.is_finite():
+        raise TradingMvpConfigError(f"{field_name} must be finite")
+    return decimal_value
+
+
+def _int_required(value: object, field_name: str) -> int:
+    if isinstance(value, bool) or value is None:
+        raise TradingMvpConfigError(f"{field_name} must be an integer")
+    try:
+        if isinstance(value, str) and value.strip() != str(int(value.strip())):
+            raise ValueError
+        integer_value = int(value)
+    except Exception as error:
+        raise TradingMvpConfigError(f"{field_name} must be an integer") from error
+    return integer_value
+
+
+def _validate_percent(value: object, field_name: str) -> Decimal:
+    decimal_value = _decimal_required(value, field_name)
+    if decimal_value < Decimal("0") or decimal_value > Decimal("100"):
+        raise TradingMvpConfigError(f"{field_name} must be between 0 and 100")
+    return decimal_value
+
+
 def _payout_percent_or_none(value: object) -> Decimal | None:
     if isinstance(value, dict):
         for key in ("payout", "payout_percent", "profit", "profit_percent", "percent", "value"):
@@ -334,6 +370,7 @@ def _entry_price_from_payload(quote_payload: dict, analysis_payload: dict) -> De
 
 
 def preview_mvp_trading_signal(pair: MvpPairOption, expiry_minutes: int) -> dict:
+    expiry_minutes = _int_required(expiry_minutes, "expiry_minutes")
     if expiry_minutes not in MVP_EXPIRY_MINUTE_OPTIONS:
         raise ValueError(f"Unsupported MVP expiry: {expiry_minutes}")
 
@@ -354,6 +391,91 @@ def preview_mvp_trading_signal(pair: MvpPairOption, expiry_minutes: int) -> dict
         "confidence": confidence,
         "payout": payout,
         "entry_price": current_price,
+    }
+
+
+def validate_mvp_session_inputs(
+    *,
+    starts_at: datetime,
+    ends_at: datetime,
+    entry_time: datetime,
+    close_time: datetime,
+    expiry_seconds: object,
+    base_amount: object,
+    max_overlaps: object,
+    overlap_multiplier: object,
+    min_payout: object,
+    min_confidence: object,
+    confidence: object,
+    payout: object,
+) -> dict[str, Decimal | int]:
+    for field_name, value in (
+        ("starts_at", starts_at),
+        ("ends_at", ends_at),
+        ("entry_time", entry_time),
+        ("close_time", close_time),
+    ):
+        if not isinstance(value, datetime):
+            raise TradingMvpConfigError(f"{field_name} must be a datetime")
+        if value.tzinfo is not None and value.utcoffset() is not None:
+            raise TradingMvpConfigError(f"{field_name} must be a naive UTC datetime")
+
+    current_time = datetime.utcnow()
+    if starts_at < current_time - timedelta(minutes=1):
+        raise TradingMvpConfigError("Session start time cannot be in the past")
+    if ends_at <= current_time:
+        raise TradingMvpConfigError("Session end time must be in the future")
+    if starts_at >= ends_at:
+        raise TradingMvpConfigError("Session start time must be earlier than end time")
+    if entry_time < starts_at:
+        raise TradingMvpConfigError("Signal entry time cannot be earlier than session start time")
+    if close_time <= entry_time:
+        raise TradingMvpConfigError("Signal close time must be later than entry time")
+    if close_time > ends_at:
+        raise TradingMvpConfigError("Signal close time cannot be later than session end time")
+
+    normalized_expiry_seconds = _int_required(expiry_seconds, "expiry_seconds")
+    if normalized_expiry_seconds not in MVP_EXPIRY_SECOND_OPTIONS:
+        allowed = ", ".join(str(value) for value in MVP_EXPIRY_SECOND_OPTIONS)
+        raise TradingMvpConfigError(f"expiry_seconds must be one of: {allowed}")
+
+    normalized_base_amount = _decimal_required(base_amount, "base_amount")
+    if normalized_base_amount <= Decimal("0"):
+        raise TradingMvpConfigError("base_amount must be greater than 0")
+    if normalized_base_amount > MVP_MAX_BASE_AMOUNT:
+        raise TradingMvpConfigError(f"base_amount must be less than or equal to {MVP_MAX_BASE_AMOUNT}")
+
+    normalized_max_overlaps = _int_required(max_overlaps, "max_overlaps")
+    if normalized_max_overlaps < 0 or normalized_max_overlaps > MVP_MAX_ALLOWED_OVERLAPS:
+        raise TradingMvpConfigError(f"max_overlaps must be between 0 and {MVP_MAX_ALLOWED_OVERLAPS}")
+
+    normalized_overlap_multiplier = _decimal_required(overlap_multiplier, "overlap_multiplier")
+    if normalized_overlap_multiplier <= Decimal("1") or normalized_overlap_multiplier > MVP_MAX_OVERLAP_MULTIPLIER:
+        raise TradingMvpConfigError(
+            f"overlap_multiplier must be greater than 1 and less than or equal to {MVP_MAX_OVERLAP_MULTIPLIER}"
+        )
+
+    normalized_min_payout = _validate_percent(min_payout, "min_payout")
+    normalized_min_confidence = _validate_percent(min_confidence, "min_confidence")
+    normalized_confidence = _validate_percent(confidence, "confidence")
+    normalized_payout = _validate_percent(payout, "payout")
+
+    if normalized_payout < normalized_min_payout:
+        raise TradingMvpConfigError(f"payout {normalized_payout}% is lower than minimum {normalized_min_payout}%")
+    if normalized_confidence < normalized_min_confidence:
+        raise TradingMvpConfigError(
+            f"confidence {normalized_confidence}% is lower than minimum {normalized_min_confidence}%"
+        )
+
+    return {
+        "expiry_seconds": normalized_expiry_seconds,
+        "base_amount": normalized_base_amount,
+        "max_overlaps": normalized_max_overlaps,
+        "overlap_multiplier": normalized_overlap_multiplier,
+        "min_payout": normalized_min_payout,
+        "min_confidence": normalized_min_confidence,
+        "confidence": normalized_confidence,
+        "payout": normalized_payout,
     }
 
 
@@ -478,6 +600,11 @@ def create_mvp_trading_session(
     pair: MvpPairOption | None = None,
     market_mode: str = MVP_DEFAULT_MARKET_MODE,
     expiry_minutes: int = MVP_EXPIRY_MINUTES,
+    base_amount: Decimal = MVP_BASE_AMOUNT,
+    max_overlaps: int = MVP_MAX_OVERLAPS,
+    overlap_multiplier: Decimal = MVP_OVERLAP_MULTIPLIER,
+    min_payout: int = MVP_MIN_PAYOUT,
+    min_confidence: int = MVP_MIN_CONFIDENCE,
     preview: dict | None = None,
 ) -> TradingSession:
     now = datetime.utcnow()
@@ -485,22 +612,49 @@ def create_mvp_trading_session(
     pair = pair or get_mvp_pair_options(market_mode)[0]
     if pair not in get_mvp_pair_options(market_mode):
         raise ValueError(f"Pair {pair.symbol} is not allowed for market mode {market_mode}")
+    expiry_minutes = _int_required(expiry_minutes, "expiry_minutes")
+    if expiry_minutes not in MVP_EXPIRY_MINUTE_OPTIONS:
+        raise TradingMvpConfigError(f"Unsupported MVP expiry: {expiry_minutes}")
     expiry_seconds = expiry_minutes * 60
     session_start = start_at or now + timedelta(minutes=MVP_SESSION_START_DELAY_MINUTES)
     session_end = session_start + timedelta(minutes=MVP_SESSION_DURATION_MINUTES)
     entry_time = session_start + timedelta(seconds=MVP_SIGNAL_COUNTDOWN_SECONDS)
     close_time = entry_time + timedelta(seconds=expiry_seconds)
-    channel_id = get_signals_channel_id()
-    cancel_open_channel_sessions(db, channel_id)
 
     if preview is None:
         preview = preview_mvp_trading_signal(pair, expiry_minutes)
+    preview_pair = preview.get("pair")
+    if preview_pair != pair:
+        raise TradingMvpConfigError("Preview pair does not match selected pair")
+    preview_expiry_minutes = _int_required(preview.get("expiry_minutes"), "preview.expiry_minutes")
+    if preview_expiry_minutes != expiry_minutes:
+        raise TradingMvpConfigError("Preview expiry does not match selected expiry")
+
     quote_payload = preview["quote"]
     analysis_payload = preview["analysis"]
     direction = preview["direction"]
     confidence = preview["confidence"]
     payout = preview["payout"]
     current_price = preview["entry_price"]
+    if direction not in {"BUY", "SELL"}:
+        raise TradingMvpConfigError(f"Unsupported direction: {direction!r}")
+    normalized_values = validate_mvp_session_inputs(
+        starts_at=session_start,
+        ends_at=session_end,
+        entry_time=entry_time,
+        close_time=close_time,
+        expiry_seconds=expiry_seconds,
+        base_amount=base_amount,
+        max_overlaps=max_overlaps,
+        overlap_multiplier=overlap_multiplier,
+        min_payout=min_payout,
+        min_confidence=min_confidence,
+        confidence=confidence,
+        payout=payout,
+    )
+
+    channel_id = get_signals_channel_id()
+    cancel_open_channel_sessions(db, channel_id)
 
     trading_session = TradingSession(
         channel_id=channel_id,
@@ -508,11 +662,11 @@ def create_mvp_trading_session(
         status="scheduled",
         starts_at=session_start,
         ends_at=session_end,
-        expiry_seconds=expiry_seconds,
-        base_amount=MVP_BASE_AMOUNT,
-        max_overlaps=MVP_MAX_OVERLAPS,
-        min_payout=MVP_MIN_PAYOUT,
-        min_confidence=MVP_MIN_CONFIDENCE,
+        expiry_seconds=normalized_values["expiry_seconds"],
+        base_amount=normalized_values["base_amount"],
+        max_overlaps=normalized_values["max_overlaps"],
+        min_payout=int(normalized_values["min_payout"]),
+        min_confidence=int(normalized_values["min_confidence"]),
         created_by_telegram_id=created_by_telegram_id,
         notes=f"MVP {market_mode} admin selected session",
     )
@@ -531,12 +685,12 @@ def create_mvp_trading_session(
         direction=direction,
         direction_source=str(analysis_payload.get("decision_source") or analysis_payload.get("mode") or "devsbite"),
         decision_reason=str(analysis_payload.get("decision_reason") or analysis_payload.get("reason") or ""),
-        confidence=confidence,
-        payout=payout,
-        expiry_seconds=expiry_seconds,
+        confidence=normalized_values["confidence"],
+        payout=normalized_values["payout"],
+        expiry_seconds=normalized_values["expiry_seconds"],
         entry_time=entry_time,
         close_time=close_time,
-        max_attempts=MVP_MAX_OVERLAPS + 1,
+        max_attempts=int(normalized_values["max_overlaps"]) + 1,
         source_payload={
             "mode": "mvp_admin_selected",
             "market_mode": market_mode,
@@ -544,6 +698,7 @@ def create_mvp_trading_session(
             "pair_code": pair.code,
             "expiry_minutes": expiry_minutes,
             "payout": str(payout),
+            "overlap_multiplier": str(normalized_values["overlap_multiplier"]),
             "quote": quote_payload,
             "analysis": analysis_payload,
         },
@@ -557,7 +712,7 @@ def create_mvp_trading_session(
         kind="base",
         status="planned",
         direction=direction,
-        expiry_seconds=expiry_seconds,
+        expiry_seconds=normalized_values["expiry_seconds"],
         entry_time=entry_time,
         close_time=close_time,
         quote_snapshot=quote_payload,
