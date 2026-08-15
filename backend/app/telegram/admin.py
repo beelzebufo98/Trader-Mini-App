@@ -1,4 +1,5 @@
 ﻿from datetime import datetime, timedelta
+from decimal import Decimal
 from html import escape
 from typing import Any
 from uuid import uuid4
@@ -629,6 +630,13 @@ def format_signal_preview(preview: dict) -> str:
     analysis_symbol = escape(str(preview.get("analysis_symbol") or pair.symbol))
     min_payout = escape(str(preview.get("min_payout", MVP_MIN_PAYOUT)))
     min_confidence = escape(str(preview.get("min_confidence", MVP_MIN_CONFIDENCE)))
+    threshold_note = ""
+    if not signal_preview_passes_confidence(preview):
+        threshold_note = (
+            "\n\n"
+            "⚠️ <b>API confidence ниже выбранного порога.</b>\n"
+            "Отправка в канал заблокирована. Можно проверить эту пару ещё раз или вернуться к выбору пары."
+        )
 
     return (
         "<b>Предпросмотр Devsbite</b>\n\n"
@@ -648,22 +656,41 @@ def format_signal_preview(preview: dict) -> str:
         f"Причина: <code>{decision_reason}</code>\n"
         f"TV / TD: <code>{tv_recommendation}</code> / <code>{td_recommendation}</code>\n\n"
         "Если данные подходят, подтверди отправку. Если нет — вернись к выбору пары."
+        f"{threshold_note}"
     )
 
 
-def signal_confirm_keyboard(preview_token: str, fast: bool) -> dict[str, Any]:
+def signal_preview_passes_confidence(preview: dict) -> bool:
+    try:
+        confidence = Decimal(str(preview.get("confidence")))
+        min_confidence = Decimal(str(preview.get("min_confidence", MVP_MIN_CONFIDENCE)))
+    except Exception:
+        return False
+    return confidence >= min_confidence
+
+
+def signal_preview_keyboard(preview_token: str, fast: bool, *, can_confirm: bool) -> dict[str, Any]:
     fast_token = "1" if fast else "0"
-    return {
-        "inline_keyboard": [
+    rows: list[list[dict[str, str]]] = []
+    if can_confirm:
+        rows.append(
             [
                 {
                     "text": "✅ Подтвердить отправку",
                     "callback_data": signal_callback("confirm", preview_token, fast_token),
                 }
-            ],
-            [{"text": "⬅️ Назад к выбору пар", "callback_data": signal_callback("preview_back", preview_token, fast_token)}],
+            ]
+        )
+    rows.append(
+        [
+            {
+                "text": "🔄 Проверить ещё раз",
+                "callback_data": signal_callback("preview_retry", preview_token, fast_token),
+            }
         ]
-    }
+    )
+    rows.append([{"text": "⬅️ Назад к выбору пар", "callback_data": signal_callback("preview_back", preview_token, fast_token)}])
+    return {"inline_keyboard": rows}
 
 
 def send_signal_preview(
@@ -695,7 +722,11 @@ def send_signal_preview(
         chat_id,
         format_signal_preview(preview),
         parse_mode="HTML",
-        reply_markup=signal_confirm_keyboard(preview_token, fast),
+        reply_markup=signal_preview_keyboard(
+            preview_token,
+            fast,
+            can_confirm=signal_preview_passes_confidence(preview),
+        ),
         disable_web_page_preview=True,
     ).raise_for_status()
 
@@ -882,6 +913,27 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                     min_payout=min_payout,
                     min_confidence=min_confidence,
                 )
+            elif action == "preview_retry":
+                preview_token = parts[0]
+                fast = len(parts) > 1 and parts[1] == "1"
+                preview = ADMIN_SIGNAL_PREVIEWS.pop(preview_token, None)
+                if preview is None:
+                    send_admin_message(client, chat_id, "Предпросмотр устарел. Запусти /signal_mvp заново.")
+                    callback_text = "Предпросмотр устарел"
+                    safe_answer_admin_callback(client, callback_id, callback_text, show_alert=True)
+                    return True
+
+                pair = preview["pair"]
+                send_signal_preview(
+                    client,
+                    chat_id,
+                    str(preview.get("market_mode", "FOREX")),
+                    pair.code,
+                    int(preview["expiry_minutes"]),
+                    fast=fast,
+                    min_payout=int(preview.get("min_payout", MVP_MIN_PAYOUT)),
+                    min_confidence=int(preview.get("min_confidence", MVP_MIN_CONFIDENCE)),
+                )
             elif action == "confirm":
                 preview_token = parts[0]
                 fast = len(parts) > 1 and parts[1] == "1"
@@ -889,6 +941,15 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                 if preview is None:
                     send_admin_message(client, chat_id, "Предпросмотр устарел. Запусти /signal_mvp заново.")
                     callback_text = "Предпросмотр устарел"
+                    safe_answer_admin_callback(client, callback_id, callback_text, show_alert=True)
+                    return True
+                if not signal_preview_passes_confidence(preview):
+                    send_admin_message(
+                        client,
+                        chat_id,
+                        "API confidence ниже выбранного порога. Сессия не создана. Вернись к выбору пары или проверь сигнал ещё раз.",
+                    )
+                    callback_text = "Confidence ниже порога"
                     safe_answer_admin_callback(client, callback_id, callback_text, show_alert=True)
                     return True
                 start_at = datetime.utcnow() + timedelta(seconds=15) if fast else None
