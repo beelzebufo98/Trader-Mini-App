@@ -28,7 +28,7 @@ from app.services.trading_mvp import (
     preview_mvp_trading_signal,
 )
 from app.services.signal_time import format_signal_time
-from app.telegram.client import answer_callback_query, copy_message, edit_message_text, send_message
+from app.telegram.client import answer_callback_query, copy_message, edit_message_text, send_message, set_chat_menu_button
 
 ADMIN_SIGNAL_PREVIEWS: dict[str, dict[str, Any]] = {}
 
@@ -119,6 +119,15 @@ def reset_funnel_session(db: Session, telegram_id: int) -> tuple[bool, bool]:
     db.delete(funnel_session)
     db.commit()
     return telegram_user_exists, True
+
+
+def reset_funnel_menu_button(client: httpx.Client, telegram_id: int) -> bool:
+    try:
+        set_chat_menu_button(client, telegram_id, {"type": "commands"}).raise_for_status()
+        return True
+    except Exception as error:
+        print(f"telegram_funnel_reset_menu_failed telegram_id={telegram_id} detail={telegram_error_detail(error)}")
+        return False
 
 
 def format_admin_help(total_users: int, segment_counts: dict[str, int]) -> str:
@@ -778,6 +787,7 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
 
             telegram_id = int(telegram_id_text)
             user_exists, session_deleted = reset_funnel_session(db, telegram_id)
+            menu_reset = reset_funnel_menu_button(client, telegram_id) if user_exists or session_deleted else False
             if session_deleted:
                 send_admin_message(
                     client,
@@ -785,6 +795,7 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
                     (
                         "Состояние воронки сброшено.\n"
                         f"Telegram ID: <code>{telegram_id}</code>\n"
+                        f"Mini App menu: <b>{'сброшено' if menu_reset else 'не удалось сбросить'}</b>\n"
                         "Теперь пользователь может заново открыть deep-link или отправить /start."
                     ),
                 )
@@ -797,6 +808,7 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
                     (
                         "У пользователя нет активного состояния воронки.\n"
                         f"Telegram ID: <code>{telegram_id}</code>\n"
+                        f"Mini App menu: <b>{'сброшено' if menu_reset else 'не удалось сбросить'}</b>\n"
                         "Telegram-пользователь в базе есть, но сбрасывать нечего."
                     ),
                 )
