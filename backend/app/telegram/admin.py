@@ -16,6 +16,7 @@ from app.services.trading_mvp import (
     ACTIVE_SESSION_STATUSES,
     MVP_EXPIRY_MINUTE_OPTIONS,
     MVP_MARKET_MODES,
+    MVP_MIN_CONFIDENCE,
     MVP_MIN_PAYOUT,
     TradingMvpConfigError,
     cancel_trading_session,
