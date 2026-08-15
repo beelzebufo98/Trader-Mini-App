@@ -2,12 +2,16 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from decimal import Decimal
 from secrets import randbelow
+from time import sleep
+from typing import Callable, TypeVar
 
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.trading import TradingSession, TradingSignal, TradingSignalAttempt, TradingSignalJob
 from app.services.devsbite import (
+    DevsbiteApiError,
+    DevsbiteRequestError,
     extract_instruments,
     extract_latest_price,
     get_advanced_analysis,
@@ -37,6 +41,9 @@ MVP_MAX_ALLOWED_OVERLAPS = 10
 MVP_MAX_OVERLAP_MULTIPLIER = Decimal("10")
 ACTIVE_SESSION_STATUSES = ("scheduled", "running")
 OPEN_JOB_STATUSES = ("scheduled", "processing")
+MVP_DEVSBITE_RETRY_DELAYS_SECONDS = (0.5, 1.0, 2.0)
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -215,6 +222,45 @@ class TradingMvpConfigError(RuntimeError):
     pass
 
 
+def _is_transient_devsbite_error(error: Exception) -> bool:
+    if isinstance(error, DevsbiteRequestError):
+        return True
+    if not isinstance(error, DevsbiteApiError):
+        return False
+
+    message = str(error).lower()
+    return any(
+        marker in message
+        for marker in (
+            "no fresh data",
+            "temporarily",
+            "temporary",
+            "timeout",
+            "timed out",
+            "try again",
+            "upstream",
+            "cache empty",
+        )
+    )
+
+
+def _with_devsbite_retry(label: str, action: Callable[[], T]) -> T:
+    for attempt, delay_seconds in enumerate((*MVP_DEVSBITE_RETRY_DELAYS_SECONDS, 0.0), start=1):
+        try:
+            return action()
+        except (DevsbiteApiError, DevsbiteRequestError) as error:
+            is_last_attempt = attempt > len(MVP_DEVSBITE_RETRY_DELAYS_SECONDS)
+            if is_last_attempt or not _is_transient_devsbite_error(error):
+                raise
+            print(
+                "devsbite_retry "
+                f"label={label} attempt={attempt} delay_seconds={delay_seconds} detail={error!r}"
+            )
+            sleep(delay_seconds)
+
+    raise TradingMvpConfigError(f"Devsbite retry loop exited unexpectedly for {label}")
+
+
 def normalize_mvp_market_mode(value: str | None) -> str:
     market_mode = (value or MVP_DEFAULT_MARKET_MODE).strip().upper()
     if market_mode not in MVP_MARKET_MODES:
@@ -354,7 +400,10 @@ def _instrument_payout(instrument: dict) -> Decimal | None:
 
 
 def _pair_payout_from_devsbite(pair: MvpPairOption, min_payout: int = MVP_MIN_PAYOUT) -> Decimal:
-    payload = get_pairs(pair.market_type.lower(), min_payout=0)
+    payload = _with_devsbite_retry(
+        f"pairs:{pair.market_type.lower()}:{pair.symbol}",
+        lambda: get_pairs(pair.market_type.lower(), min_payout=0),
+    )
     for instrument in extract_instruments(payload):
         if not _instrument_matches_pair(instrument, pair):
             continue
@@ -380,7 +429,10 @@ def get_mvp_pair_options_with_payout(
     instruments_by_market: dict[str, list[dict]] = {}
 
     for market_type in sorted({pair.market_type for pair in pair_options}):
-        payload = get_pairs(market_type.lower(), min_payout=min_payout)
+        payload = _with_devsbite_retry(
+            f"pairs:{market_type.lower()}:{min_payout}",
+            lambda market_type=market_type: get_pairs(market_type.lower(), min_payout=min_payout),
+        )
         instruments_by_market[market_type] = extract_instruments(payload)
 
     pairs_with_payout: list[tuple[MvpPairOption, Decimal]] = []
@@ -480,19 +532,25 @@ def _tv_recommendation_score(tv_payload: dict | None) -> tuple[Decimal, str]:
 
 def _build_advanced_fallback_analysis(pair: MvpPairOption, expiry_minutes: int, combined_payload: dict) -> dict:
     advanced_symbol = _advanced_analysis_symbol(pair)
-    advanced_payload = get_advanced_analysis(
-        advanced_symbol,
-        interval="1min",
-        category=pair.category,
+    advanced_payload = _with_devsbite_retry(
+        f"advanced:{pair.category}:{advanced_symbol}",
+        lambda: get_advanced_analysis(
+            advanced_symbol,
+            interval="1min",
+            category=pair.category,
+        ),
     )
 
     tv_payload: dict | None = None
     try:
-        tv_payload = get_tv_analysis(
-            _tv_analysis_symbol(pair),
-            exchange="FX_IDC",
-            screener="forex",
-            interval="1m",
+        tv_payload = _with_devsbite_retry(
+            f"tv:{pair.category}:{_tv_analysis_symbol(pair)}",
+            lambda: get_tv_analysis(
+                _tv_analysis_symbol(pair),
+                exchange="FX_IDC",
+                screener="forex",
+                interval="1m",
+            ),
         )
     except Exception as error:
         tv_payload = {"ok": False, "fallback": True, "reason": repr(error)}
@@ -581,6 +639,8 @@ def _build_advanced_fallback_analysis(pair: MvpPairOption, expiry_minutes: int, 
 
 def _direction_from_payload(payload: dict) -> str:
     direction = str(payload.get("signal") or payload.get("direction") or "").upper()
+    if direction == "NO_TRADE":
+        return "NO_TRADE"
     if direction in {"CALL", "BUY", "UP", "LONG"}:
         return "BUY"
     if direction in {"PUT", "SELL", "DOWN", "SHORT"}:
@@ -614,11 +674,28 @@ def preview_mvp_trading_signal(
     normalized_min_payout = int(_validate_percent(min_payout, "min_payout"))
     normalized_min_confidence = int(_validate_percent(min_confidence, "min_confidence"))
 
-    quote_payload = get_quote(pair.category, pair.symbol, history_seconds=300)
+    quote_payload = _with_devsbite_retry(
+        f"quote:{pair.category}:{pair.symbol}",
+        lambda: get_quote(pair.category, pair.symbol, history_seconds=300),
+    )
     analysis_symbol = _combined_analysis_symbol(pair)
-    analysis_payload = get_combined_analysis(analysis_symbol, expiry_minutes)
+    analysis_payload = _with_devsbite_retry(
+        f"combined:{analysis_symbol}:{expiry_minutes}",
+        lambda: get_combined_analysis(analysis_symbol, expiry_minutes),
+    )
     if _combined_needs_fallback(analysis_payload, normalized_min_confidence):
-        analysis_payload = _build_advanced_fallback_analysis(pair, expiry_minutes, analysis_payload)
+        combined_payload = analysis_payload
+        try:
+            analysis_payload = _build_advanced_fallback_analysis(pair, expiry_minutes, combined_payload)
+        except Exception as error:
+            analysis_payload = {
+                **combined_payload,
+                "fallback_error": repr(error),
+                "decision_reason": (
+                    f"{combined_payload.get('decision_reason') or ''}; "
+                    f"advanced_tv_fallback_failed={error!r}"
+                ).strip("; "),
+            }
     direction = _direction_from_payload(analysis_payload)
     confidence = _confidence_from_payload(analysis_payload)
     payout = _pair_payout_from_devsbite(pair, normalized_min_payout)

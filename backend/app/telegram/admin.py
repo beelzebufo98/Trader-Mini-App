@@ -632,9 +632,12 @@ def format_signal_preview(preview: dict) -> str:
     min_confidence = escape(str(preview.get("min_confidence", MVP_MIN_CONFIDENCE)))
     threshold_note = ""
     if not signal_preview_passes_confidence(preview):
+        block_reason = "API confidence ниже выбранного порога."
+        if preview.get("direction") not in {"BUY", "SELL"}:
+            block_reason = "API не вернул торговое направление BUY/SELL."
         threshold_note = (
             "\n\n"
-            "⚠️ <b>API confidence ниже выбранного порога.</b>\n"
+            f"⚠️ <b>{block_reason}</b>\n"
             "Отправка в канал заблокирована. Можно проверить эту пару ещё раз или вернуться к выбору пары."
         )
 
@@ -666,7 +669,7 @@ def signal_preview_passes_confidence(preview: dict) -> bool:
         min_confidence = Decimal(str(preview.get("min_confidence", MVP_MIN_CONFIDENCE)))
     except Exception:
         return False
-    return confidence >= min_confidence
+    return preview.get("direction") in {"BUY", "SELL"} and confidence >= min_confidence
 
 
 def signal_preview_keyboard(preview_token: str, fast: bool, *, can_confirm: bool) -> dict[str, Any]:
