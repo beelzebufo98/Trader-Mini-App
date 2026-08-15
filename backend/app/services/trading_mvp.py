@@ -231,8 +231,6 @@ def get_mvp_pair_option(code: str) -> MvpPairOption:
 
 
 def _combined_analysis_symbol(pair: MvpPairOption) -> str:
-    if pair.market_type == "OTC":
-        return pair.symbol.replace(" OTC", "").strip()
     return pair.symbol
 
 
