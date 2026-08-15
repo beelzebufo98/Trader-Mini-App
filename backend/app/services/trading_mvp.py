@@ -7,7 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.trading import TradingSession, TradingSignal, TradingSignalAttempt, TradingSignalJob
-from app.services.devsbite import extract_instruments, extract_latest_price, get_combined_analysis, get_pairs, get_quote
+from app.services.devsbite import (
+    extract_instruments,
+    extract_latest_price,
+    get_advanced_analysis,
+    get_combined_analysis,
+    get_pairs,
+    get_quote,
+    get_tv_analysis,
+)
 from app.services.signal_time import format_signal_time
 
 MVP_DEFAULT_MARKET_MODE = "FOREX"
@@ -234,6 +242,24 @@ def _combined_analysis_symbol(pair: MvpPairOption) -> str:
     return pair.symbol
 
 
+def _indicator_value(payload: dict, indicator: str, field: str) -> Decimal | None:
+    raw_indicators = payload.get("raw_indicators")
+    if not isinstance(raw_indicators, dict):
+        return None
+    indicator_payload = raw_indicators.get(indicator)
+    if not isinstance(indicator_payload, dict):
+        return None
+    return _decimal_or_none(indicator_payload.get(field))
+
+
+def _advanced_analysis_symbol(pair: MvpPairOption) -> str:
+    return pair.symbol.replace(" OTC", "").strip()
+
+
+def _tv_analysis_symbol(pair: MvpPairOption) -> str:
+    return pair.symbol.replace(" OTC", "").replace("/", "").replace(" ", "").upper()
+
+
 def get_signals_channel_id() -> int:
     value = settings.telegram_signals_channel_id.strip()
     if not value:
@@ -377,6 +403,182 @@ def _confidence_from_payload(payload: dict) -> Decimal:
     raise TradingMvpConfigError(f"Devsbite returned invalid confidence: {payload.get('confidence')!r}")
 
 
+def _combined_needs_fallback(payload: dict, min_confidence: int) -> bool:
+    signal = str(payload.get("signal") or payload.get("direction") or "").upper()
+    confidence = _decimal_or_none(payload.get("confidence")) or Decimal("0")
+    return signal == "NO_TRADE" and confidence < Decimal(str(min_confidence))
+
+
+def _score_sign(value: Decimal | None, *, dead_zone: Decimal = Decimal("0")) -> int:
+    if value is None:
+        return 0
+    if value > dead_zone:
+        return 1
+    if value < -dead_zone:
+        return -1
+    return 0
+
+
+def _ohlc_momentum_score(ohlc: object) -> Decimal:
+    if not isinstance(ohlc, list) or len(ohlc) < 3:
+        return Decimal("0")
+
+    closes: list[Decimal] = []
+    highs: list[Decimal] = []
+    lows: list[Decimal] = []
+    for candle in ohlc:
+        if not isinstance(candle, dict):
+            continue
+        close = _decimal_or_none(candle.get("close"))
+        high = _decimal_or_none(candle.get("high"))
+        low = _decimal_or_none(candle.get("low"))
+        if close is not None:
+            closes.append(close)
+        if high is not None:
+            highs.append(high)
+        if low is not None:
+            lows.append(low)
+
+    if len(closes) < 3 or not highs or not lows:
+        return Decimal("0")
+
+    window = closes[-min(20, len(closes)) :]
+    delta = window[-1] - window[0]
+    price_range = max(highs[-len(window):]) - min(lows[-len(window):])
+    if price_range <= 0:
+        return Decimal("0")
+
+    normalized = delta / price_range
+    if normalized > Decimal("1"):
+        return Decimal("1")
+    if normalized < Decimal("-1"):
+        return Decimal("-1")
+    return normalized
+
+
+def _tv_recommendation_score(tv_payload: dict | None) -> tuple[Decimal, str]:
+    if not tv_payload:
+        return Decimal("0"), "tv_unavailable"
+    if tv_payload.get("fallback") is True or tv_payload.get("ok") is False:
+        return Decimal("0"), "tv_fallback_ignored"
+
+    summary = tv_payload.get("summary")
+    recommendation = ""
+    if isinstance(summary, dict):
+        recommendation = str(summary.get("RECOMMENDATION") or "")
+    recommendation = recommendation.upper()
+    if "STRONG_BUY" in recommendation:
+        return Decimal("1"), recommendation
+    if "BUY" in recommendation:
+        return Decimal("0.65"), recommendation
+    if "STRONG_SELL" in recommendation:
+        return Decimal("-1"), recommendation
+    if "SELL" in recommendation:
+        return Decimal("-0.65"), recommendation
+    return Decimal("0"), recommendation or "NEUTRAL"
+
+
+def _build_advanced_fallback_analysis(pair: MvpPairOption, expiry_minutes: int, combined_payload: dict) -> dict:
+    advanced_symbol = _advanced_analysis_symbol(pair)
+    advanced_payload = get_advanced_analysis(
+        advanced_symbol,
+        interval="1min",
+        category=pair.category,
+    )
+
+    tv_payload: dict | None = None
+    try:
+        tv_payload = get_tv_analysis(
+            _tv_analysis_symbol(pair),
+            exchange="FX_IDC",
+            screener="forex",
+            interval="1m",
+        )
+    except Exception as error:
+        tv_payload = {"ok": False, "fallback": True, "reason": repr(error)}
+
+    price = _decimal_or_none(advanced_payload.get("price"))
+    ema9 = _indicator_value(advanced_payload, "EMA9", "ema")
+    ema21 = _indicator_value(advanced_payload, "EMA21", "ema")
+    ema50 = _indicator_value(advanced_payload, "EMA50", "ema")
+    rsi = _indicator_value(advanced_payload, "RSI", "rsi")
+    macd = _indicator_value(advanced_payload, "MACD", "macd")
+    plus_di = _indicator_value(advanced_payload, "PLUS_DI", "plus_di")
+    minus_di = _indicator_value(advanced_payload, "MINUS_DI", "minus_di")
+    mom = _indicator_value(advanced_payload, "MOM", "mom")
+    roc = _indicator_value(advanced_payload, "ROC", "roc")
+    adx = _indicator_value(advanced_payload, "ADX", "adx")
+
+    votes: list[Decimal] = []
+    if price is not None:
+        votes.append(Decimal(_score_sign(price - ema9)) * Decimal("0.75") if ema9 is not None else Decimal("0"))
+        votes.append(Decimal(_score_sign(price - ema21)) if ema21 is not None else Decimal("0"))
+        votes.append(Decimal(_score_sign(price - ema50)) * Decimal("0.75") if ema50 is not None else Decimal("0"))
+    votes.append(Decimal(_score_sign(ema9 - ema21)) if ema9 is not None and ema21 is not None else Decimal("0"))
+    votes.append(Decimal(_score_sign(plus_di - minus_di)) if plus_di is not None and minus_di is not None else Decimal("0"))
+    votes.append(Decimal(_score_sign(macd)) * Decimal("0.6") if macd is not None else Decimal("0"))
+    votes.append(Decimal(_score_sign(mom)) * Decimal("0.6") if mom is not None else Decimal("0"))
+    votes.append(Decimal(_score_sign(roc)) * Decimal("0.6") if roc is not None else Decimal("0"))
+    votes.append(_ohlc_momentum_score(advanced_payload.get("ohlc")) * Decimal("1.2"))
+
+    if rsi is not None:
+        if rsi >= Decimal("70"):
+            votes.append(Decimal("-0.6"))
+        elif rsi <= Decimal("30"):
+            votes.append(Decimal("0.6"))
+        elif rsi > Decimal("55"):
+            votes.append(Decimal("0.35"))
+        elif rsi < Decimal("45"):
+            votes.append(Decimal("-0.35"))
+
+    tv_score, tv_reason = _tv_recommendation_score(tv_payload)
+    if tv_score != 0:
+        votes.append(tv_score)
+
+    meaningful_votes = [vote for vote in votes if vote != 0]
+    if not meaningful_votes:
+        raise TradingMvpConfigError(f"Advanced analysis did not produce usable signals for {pair.symbol}")
+
+    raw_score = sum(meaningful_votes, Decimal("0")) / Decimal(len(meaningful_votes))
+    if raw_score > Decimal("1"):
+        raw_score = Decimal("1")
+    if raw_score < Decimal("-1"):
+        raw_score = Decimal("-1")
+
+    direction = "BUY" if raw_score >= 0 else "SELL"
+    trend_multiplier = Decimal("1")
+    if adx is not None:
+        if adx >= Decimal("40"):
+            trend_multiplier = Decimal("1.15")
+        elif adx < Decimal("20"):
+            trend_multiplier = Decimal("0.75")
+
+    confidence = abs(raw_score) * Decimal("100") * trend_multiplier
+    confidence = max(Decimal("0"), min(Decimal("100"), confidence.quantize(Decimal("1"))))
+
+    return {
+        "ok": True,
+        "mode": "advanced_tv_fallback",
+        "symbol": pair.symbol,
+        "advanced_symbol": advanced_symbol,
+        "expiry_min": expiry_minutes,
+        "price": advanced_payload.get("price"),
+        "signal": direction,
+        "confidence": int(confidence),
+        "is_random": False,
+        "decision_source": "advanced_tv_fallback",
+        "decision_reason": (
+            f"combined_no_trade_low_confidence; score={raw_score:.4f}; "
+            f"adx={adx}; tv={tv_reason}"
+        ),
+        "tv_recommendation": tv_reason,
+        "td_recommendation": direction,
+        "combined": combined_payload,
+        "advanced": advanced_payload,
+        "tv": tv_payload,
+    }
+
+
 def _direction_from_payload(payload: dict) -> str:
     direction = str(payload.get("signal") or payload.get("direction") or "").upper()
     if direction in {"CALL", "BUY", "UP", "LONG"}:
@@ -415,6 +617,8 @@ def preview_mvp_trading_signal(
     quote_payload = get_quote(pair.category, pair.symbol, history_seconds=300)
     analysis_symbol = _combined_analysis_symbol(pair)
     analysis_payload = get_combined_analysis(analysis_symbol, expiry_minutes)
+    if _combined_needs_fallback(analysis_payload, normalized_min_confidence):
+        analysis_payload = _build_advanced_fallback_analysis(pair, expiry_minutes, analysis_payload)
     direction = _direction_from_payload(analysis_payload)
     confidence = _confidence_from_payload(analysis_payload)
     payout = _pair_payout_from_devsbite(pair, normalized_min_payout)
