@@ -364,6 +364,8 @@ def start_bot_reminder_flow(
 
     get_or_create_user_settings(db, telegram_id)
     funnel_session = get_or_create_funnel_session(db, telegram_id)
+    if funnel_session.access_granted:
+        return
 
     token = uuid.uuid4().hex
     funnel_session.reminder_kind = kind
@@ -376,7 +378,13 @@ def start_bot_reminder_flow(
     db.commit()
 
 
-def cancel_bot_reminder_flow(db: Session, user: dict[str, Any], client: httpx.Client | None = None, chat_id: int | None = None) -> None:
+def cancel_bot_reminder_flow(
+    db: Session,
+    user: dict[str, Any],
+    client: httpx.Client | None = None,
+    chat_id: int | None = None,
+    delete_last_delivery: bool = False,
+) -> None:
     telegram_id = user.get("id")
     if not isinstance(telegram_id, int):
         return
@@ -396,7 +404,7 @@ def cancel_bot_reminder_flow(db: Session, user: dict[str, Any], client: httpx.Cl
     funnel_session.last_media_message_id = None
     db.commit()
 
-    if client is not None and chat_id is not None:
+    if delete_last_delivery and client is not None and chat_id is not None:
         delete_funnel_delivery(client, chat_id, last_message_id, last_media_message_id)
 
 
@@ -653,6 +661,7 @@ def process_due_funnel_reminders() -> None:
                 FunnelSession.reminder_kind != "",
                 FunnelSession.reminder_stage > 0,
                 FunnelSession.reminder_token != "",
+                FunnelSession.access_granted.is_(False),
                 FunnelSession.reminder_chat_id.isnot(None),
                 FunnelSession.reminder_due_at.isnot(None),
                 FunnelSession.reminder_due_at <= now,

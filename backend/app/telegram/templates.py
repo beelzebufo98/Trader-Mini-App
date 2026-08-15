@@ -636,6 +636,111 @@ BOT_TEXTS = {
     },
 }
 
+LEGACY_START_TEXTS = {
+    "ru": {
+        "message": (
+            "Привет! 👋\n\n"
+            "Профессиональные торговые сигналы для бинарных опционов и форекс рынка.\n\n"
+            "Выберите формат работы:"
+        ),
+        "mini_app": "⚡ Мини-апп (рекомендуется)",
+        "text_format": "💬 Текстовый формат",
+    },
+    "en": {
+        "message": (
+            "Hi! 👋\n\n"
+            "Professional trading signals for binary options and the forex market.\n\n"
+            "Choose how you want to work:"
+        ),
+        "mini_app": "⚡ Mini App (recommended)",
+        "text_format": "💬 Text format",
+    },
+}
+SIGNAL_REQUEST_RE = re.compile(
+    r"^\s*(?:(?:/signal|signal|сигнал)\s+)?([a-z]{3}/?[a-z]{3}(?:\s+otc)?|[a-z]{6}(?:\s+otc)?)\s+(\d{1,2})\s*(?:m|min|мин|м)?\s*$",
+    re.IGNORECASE,
+)
+BOT_TEXTS = {
+    "ru": {
+        "start": LEGACY_START_TEXTS["ru"]["message"],
+        "mini_app": LEGACY_START_TEXTS["ru"]["mini_app"],
+        "text_format": LEGACY_START_TEXTS["ru"]["text_format"],
+        "text_selected": "Текстовый формат выбран",
+        "text_selected_message": (
+            "Текстовый формат выбран.\n\n"
+            "Сигналы будут приходить сообщениями Telegram. На первом этапе реальные сигналы еще не подключены."
+        ),
+        "open_mini_app": "⚡ Открыть Mini App",
+        "team_start": "Вы выбрали маршрут команды.\n\nНажмите кнопку ниже, чтобы войти в команду Paradox FX.",
+        "join_team": "ВОЙТИ В КОМАНДУ",
+    },
+    "en": {
+        "start": LEGACY_START_TEXTS["en"]["message"],
+        "mini_app": LEGACY_START_TEXTS["en"]["mini_app"],
+        "text_format": LEGACY_START_TEXTS["en"]["text_format"],
+        "text_selected": "Text format selected",
+        "text_selected_message": (
+            "Text format selected.\n\n"
+            "Signals will be delivered as Telegram messages. Real signals are not connected at this stage."
+        ),
+        "open_mini_app": "⚡ Open Mini App",
+        "team_start": "You selected the team route.\n\nTap the button below to join the Paradox FX team.",
+        "join_team": "JOIN THE TEAM",
+    },
+    "es": {
+        "start": "¡Hola! 👋\n\nSeñales profesionales para opciones binarias y forex.\n\nElige el formato de trabajo:",
+        "mini_app": "⚡ Mini App (recomendado)",
+        "text_format": "💬 Formato de texto",
+        "text_selected": "Formato de texto seleccionado",
+        "text_selected_message": (
+            "Formato de texto seleccionado.\n\n"
+            "Las señales llegarán como mensajes de Telegram. Las señales reales aún no están conectadas."
+        ),
+        "open_mini_app": "⚡ Abrir Mini App",
+        "team_start": "Has elegido la ruta del equipo.\n\nPulsa el botón de abajo para unirte al equipo Paradox FX.",
+        "join_team": "UNIRSE AL EQUIPO",
+    },
+    "pt": {
+        "start": "Olá! 👋\n\nSinais profissionais para opções binárias e forex.\n\nEscolha o formato de trabalho:",
+        "mini_app": "⚡ Mini App (recomendado)",
+        "text_format": "💬 Formato de texto",
+        "text_selected": "Formato de texto selecionado",
+        "text_selected_message": (
+            "Formato de texto selecionado.\n\n"
+            "Os sinais chegarão como mensagens do Telegram. Sinais reais ainda não estão conectados."
+        ),
+        "open_mini_app": "⚡ Abrir Mini App",
+        "team_start": "Você escolheu a rota da equipe.\n\nToque no botão abaixo para entrar na equipe Paradox FX.",
+        "join_team": "ENTRAR NA EQUIPE",
+    },
+    "tr": {
+        "start": "Merhaba! 👋\n\nBinary opsiyonlar ve forex piyasası için profesyonel işlem sinyalleri.\n\nÇalışma formatını seçin:",
+        "mini_app": "⚡ Mini App (önerilir)",
+        "text_format": "💬 Metin formatı",
+        "text_selected": "Metin formatı seçildi",
+        "text_selected_message": (
+            "Metin formatı seçildi.\n\n"
+            "Sinyaller Telegram mesajları olarak gelecek. Gerçek sinyaller bu aşamada bağlı değil."
+        ),
+        "open_mini_app": "⚡ Mini App'i aç",
+        "team_start": "Takım rotasını seçtiniz.\n\nParadox FX ekibine katılmak için aşağıdaki düğmeye dokunun.",
+        "join_team": "TAKIMA KATIL",
+    },
+    "ar": {
+        "start": "مرحباً! 👋\n\nإشارات تداول احترافية للخيارات الثنائية وسوق الفوركس.\n\nاختر طريقة العمل:",
+        "mini_app": "⚡ Mini App (موصى به)",
+        "text_format": "💬 تنسيق نصي",
+        "text_selected": "تم اختيار التنسيق النصي",
+        "text_selected_message": (
+            "تم اختيار التنسيق النصي.\n\n"
+            "ستصل الإشارات كرسائل Telegram. الإشارات الحقيقية غير متصلة في هذه المرحلة."
+        ),
+        "open_mini_app": "⚡ فتح Mini App",
+        "team_start": "لقد اخترت مسار الفريق.\n\nاضغط الزر أدناه للانضمام إلى فريق Paradox FX.",
+        "join_team": "انضم إلى الفريق",
+    },
+}
+
 TRADER_ID_TEXTS = {
     "ru": {
         "not_found": "\u0410\u043a\u043a\u0430\u0443\u043d\u0442 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u043f\u043e \u043d\u0430\u0448\u0435\u0439 \u0441\u0441\u044b\u043b\u043a\u0435",
