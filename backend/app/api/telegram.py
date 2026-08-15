@@ -53,6 +53,7 @@ from app.telegram.templates import (
     SIGNAL_REQUEST_RE,
     SUPPORTED_LANGUAGES,
     TRADER_ID_RE,
+    TRADER_ID_TEXTS,
     bot_reminder_keyboard,
     funnel_node_keyboard,
     funnel_texts,
@@ -81,6 +82,12 @@ TOPUP_LOW_REMINDER_KIND = "TOPUP-LOW"
 TOPUP_NOT_FOUND_REMINDER_KIND = "TOPUP-NOT-FOUND"
 REMINDER_03_TOPUP_LOW_KIND = "REMINDER-03:TOPUP-LOW"
 REMINDER_03_TOPUP_NOT_FOUND_KIND = "REMINDER-03:TOPUP-NOT-FOUND"
+TRADER_ID_EXPECTED_REMINDER_KINDS = {
+    BOT_STEP_REMINDER_KIND,
+    ID_REMINDER_KIND,
+    ID_FORMAT_REMINDER_KIND,
+    ID_NOT_FOUND_REMINDER_KIND,
+}
 MIN_TOPUP_AMOUNT_USD = 20.0
 BOT_REMINDER_DELAYS_SECONDS = (
     (5 * 60, 15 * 60),
@@ -1393,6 +1400,18 @@ def handle_invalid_trader_id_message(db: Session, user: dict[str, Any], chat_id:
 
     funnel_route, language = get_saved_context(db, user)
     if funnel_route not in {"BOT", "TEAM"}:
+        return False
+
+    telegram_id = user.get("id")
+    if not isinstance(telegram_id, int):
+        return False
+
+    funnel_session = db.query(FunnelSession).filter(FunnelSession.telegram_id == telegram_id).first()
+    if (
+        funnel_session is None
+        or funnel_session.access_granted
+        or funnel_session.reminder_kind not in TRADER_ID_EXPECTED_REMINDER_KINDS
+    ):
         return False
 
     language = normalize_funnel_language(language or user.get("language_code"))
