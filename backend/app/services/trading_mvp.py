@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from decimal import Decimal
 from secrets import randbelow
@@ -20,7 +20,7 @@ from app.services.devsbite import (
     get_quote,
     get_tv_analysis,
 )
-from app.services.signal_time import format_signal_time
+from app.services.signal_time import SIGNAL_TIMEZONE, format_signal_time
 
 MVP_DEFAULT_MARKET_MODE = "FOREX"
 MVP_MARKET_MODES = ("FOREX", "OTC", "MIXED")
@@ -268,13 +268,21 @@ def normalize_mvp_market_mode(value: str | None) -> str:
     return market_mode
 
 
+def is_forex_market_open(now: datetime | None = None) -> bool:
+    current_time = now or datetime.utcnow()
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=timezone.utc)
+    market_time = current_time.astimezone(SIGNAL_TIMEZONE)
+    return market_time.weekday() < 5
+
+
 def get_mvp_pair_options(market_mode: str | None = None) -> tuple[MvpPairOption, ...]:
     normalized_market_mode = normalize_mvp_market_mode(market_mode)
     if normalized_market_mode == "FOREX":
-        return MVP_FOREX_PAIR_OPTIONS
+        return MVP_FOREX_PAIR_OPTIONS if is_forex_market_open() else ()
     if normalized_market_mode == "OTC":
         return MVP_OTC_PAIR_OPTIONS
-    return MVP_PAIR_OPTIONS
+    return (MVP_FOREX_PAIR_OPTIONS if is_forex_market_open() else ()) + MVP_OTC_PAIR_OPTIONS
 
 
 def get_mvp_pair_option(code: str) -> MvpPairOption:
@@ -932,8 +940,11 @@ def create_mvp_trading_session(
 ) -> TradingSession:
     now = datetime.utcnow()
     market_mode = normalize_mvp_market_mode(market_mode)
-    pair = pair or get_mvp_pair_options(market_mode)[0]
-    if pair not in get_mvp_pair_options(market_mode):
+    allowed_pairs = get_mvp_pair_options(market_mode)
+    if not allowed_pairs:
+        raise TradingMvpConfigError(f"No tradable pairs are available for market mode {market_mode}")
+    pair = pair or allowed_pairs[0]
+    if pair not in allowed_pairs:
         raise ValueError(f"Pair {pair.symbol} is not allowed for market mode {market_mode}")
     expiry_minutes = _int_required(expiry_minutes, "expiry_minutes")
     if expiry_minutes not in MVP_EXPIRY_MINUTE_OPTIONS:

@@ -26,6 +26,7 @@ from app.services.trading_mvp import (
     get_mvp_pair_option,
     get_mvp_pair_options,
     get_mvp_pair_options_with_payout,
+    is_forex_market_open,
     normalize_mvp_market_mode,
     preview_mvp_trading_signal,
 )
@@ -371,14 +372,32 @@ def signal_pair_keyboard(market_mode: str, fast: bool, min_payout: int = MVP_MIN
     if current_row:
         rows.append(current_row)
     if not rows:
-        rows.append(
-            [
-                {
-                    "text": f"Нет пар с payout >= {min_payout}%",
-                    "callback_data": signal_callback("noop"),
-                }
-            ]
-        )
+        if normalized_market_mode == "FOREX" and not is_forex_market_open():
+            rows.append(
+                [
+                    {
+                        "text": "FOREX закрыт на выходных",
+                        "callback_data": signal_callback("noop"),
+                    }
+                ]
+            )
+            rows.append(
+                [
+                    {
+                        "text": "Перейти к OTC",
+                        "callback_data": signal_callback("market", "OTC", fast_token),
+                    }
+                ]
+            )
+        else:
+            rows.append(
+                [
+                    {
+                        "text": f"Нет пар с payout >= {min_payout}%",
+                        "callback_data": signal_callback("noop"),
+                    }
+                ]
+            )
     rows.append([{"text": "⬅️ Назад к confidence", "callback_data": signal_callback("payout", normalized_market_mode, min_payout, fast_token)}])
     return {"inline_keyboard": rows}
 
@@ -491,6 +510,12 @@ def send_signal_pair_menu(
     min_confidence: int = MVP_MIN_CONFIDENCE,
 ) -> None:
     normalized_market_mode = normalize_mvp_market_mode(market_mode)
+    market_note = ""
+    if not is_forex_market_open():
+        if normalized_market_mode == "FOREX":
+            market_note = "\n\n⚠️ FOREX сейчас закрыт по московскому времени. Выберите OTC."
+        elif normalized_market_mode == "MIXED":
+            market_note = "\n\n⚠️ FOREX сейчас закрыт, поэтому в MIXED доступны только OTC-пары."
     send_message(
         client,
         chat_id,
@@ -500,6 +525,7 @@ def send_signal_pair_menu(
             f"Min payout: <b>{min_payout}%</b>\n"
             f"Min confidence: <b>{min_confidence}%</b>\n"
             "Выберите пару. Список уже отфильтрован через Devsbite по выбранному payout."
+            f"{market_note}"
         ),
         parse_mode="HTML",
         reply_markup=signal_pair_keyboard(normalized_market_mode, fast, min_payout, min_confidence),
