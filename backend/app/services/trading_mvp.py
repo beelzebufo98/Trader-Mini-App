@@ -230,6 +230,12 @@ def get_mvp_pair_option(code: str) -> MvpPairOption:
         raise ValueError(f"Unsupported MVP pair code: {code}") from error
 
 
+def _combined_analysis_symbol(pair: MvpPairOption) -> str:
+    if pair.market_type == "OTC":
+        return pair.symbol.replace(" OTC", "").strip()
+    return pair.symbol
+
+
 def get_signals_channel_id() -> int:
     value = settings.telegram_signals_channel_id.strip()
     if not value:
@@ -323,7 +329,7 @@ def _instrument_payout(instrument: dict) -> Decimal | None:
     return None
 
 
-def _pair_payout_from_devsbite(pair: MvpPairOption) -> Decimal:
+def _pair_payout_from_devsbite(pair: MvpPairOption, min_payout: int = MVP_MIN_PAYOUT) -> Decimal:
     payload = get_pairs(pair.market_type.lower(), min_payout=0)
     for instrument in extract_instruments(payload):
         if not _instrument_matches_pair(instrument, pair):
@@ -331,9 +337,9 @@ def _pair_payout_from_devsbite(pair: MvpPairOption) -> Decimal:
         payout = _instrument_payout(instrument)
         if payout is None:
             raise TradingMvpConfigError(f"Devsbite pair {pair.symbol} has no payout field")
-        if payout < Decimal(str(MVP_MIN_PAYOUT)):
+        if payout < Decimal(str(min_payout)):
             raise TradingMvpConfigError(
-                f"Pair {pair.symbol} payout is {payout}% but minimum is {MVP_MIN_PAYOUT}%"
+                f"Pair {pair.symbol} payout is {payout}% but minimum is {min_payout}%"
             )
         return payout
 
@@ -395,24 +401,36 @@ def _entry_price_from_payload(quote_payload: dict, analysis_payload: dict) -> De
     return _decimal_or_none(analysis_payload.get("price"))
 
 
-def preview_mvp_trading_signal(pair: MvpPairOption, expiry_minutes: int) -> dict:
+def preview_mvp_trading_signal(
+    pair: MvpPairOption,
+    expiry_minutes: int,
+    *,
+    min_payout: int = MVP_MIN_PAYOUT,
+    min_confidence: int = MVP_MIN_CONFIDENCE,
+) -> dict:
     expiry_minutes = _int_required(expiry_minutes, "expiry_minutes")
     if expiry_minutes not in MVP_EXPIRY_MINUTE_OPTIONS:
         raise ValueError(f"Unsupported MVP expiry: {expiry_minutes}")
+    normalized_min_payout = int(_validate_percent(min_payout, "min_payout"))
+    normalized_min_confidence = int(_validate_percent(min_confidence, "min_confidence"))
 
     quote_payload = get_quote(pair.category, pair.symbol, history_seconds=300)
-    analysis_payload = get_combined_analysis(pair.symbol, expiry_minutes)
+    analysis_symbol = _combined_analysis_symbol(pair)
+    analysis_payload = get_combined_analysis(analysis_symbol, expiry_minutes)
     direction = _direction_from_payload(analysis_payload)
     confidence = _confidence_from_payload(analysis_payload)
-    payout = _pair_payout_from_devsbite(pair)
+    payout = _pair_payout_from_devsbite(pair, normalized_min_payout)
     current_price = _entry_price_from_payload(quote_payload, analysis_payload)
 
     return {
         "pair": pair,
         "expiry_minutes": expiry_minutes,
         "expiry_seconds": expiry_minutes * 60,
+        "min_payout": normalized_min_payout,
+        "min_confidence": normalized_min_confidence,
         "quote": quote_payload,
         "analysis": analysis_payload,
+        "analysis_symbol": analysis_symbol,
         "direction": direction,
         "confidence": confidence,
         "payout": payout,
