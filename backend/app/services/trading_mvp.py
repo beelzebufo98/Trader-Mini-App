@@ -939,6 +939,7 @@ def create_mvp_trading_session(
     *,
     created_by_telegram_id: int | None = None,
     start_at: datetime | None = None,
+    channel_id: int | None = None,
     pair: MvpPairOption | None = None,
     market_mode: str = MVP_DEFAULT_MARKET_MODE,
     expiry_minutes: int = MVP_EXPIRY_MINUTES,
@@ -998,11 +999,11 @@ def create_mvp_trading_session(
         payout=payout,
     )
 
-    channel_id = get_signals_channel_id(db)
-    cancel_open_channel_sessions(db, channel_id)
+    target_channel_id = channel_id if channel_id is not None else get_signals_channel_id(db)
+    cancel_open_channel_sessions(db, target_channel_id)
 
     trading_session = TradingSession(
-        channel_id=channel_id,
+        channel_id=target_channel_id,
         market_mode=market_mode,
         status="scheduled",
         starts_at=session_start,
@@ -1020,7 +1021,7 @@ def create_mvp_trading_session(
 
     signal = TradingSignal(
         session_id=trading_session.id,
-        channel_id=channel_id,
+        channel_id=target_channel_id,
         status="planned",
         market_type=pair.market_type,
         category=pair.category,

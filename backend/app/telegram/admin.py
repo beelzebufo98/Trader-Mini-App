@@ -27,6 +27,7 @@ from app.services.trading_mvp import (
     get_mvp_pair_option,
     get_mvp_pair_options,
     get_mvp_pair_options_with_payout,
+    get_signals_channel_id,
     is_forex_market_open,
     normalize_mvp_market_mode,
     preview_mvp_trading_signal,
@@ -281,7 +282,7 @@ def format_admin_help(total_users: int, segment_counts: dict[str, int]) -> str:
         "/channel_remove -100... - отключить сигнальный канал в базе",
         "",
         "<b>Торговые сессии MVP</b>",
-        "/signal_mvp - открыть inline-мастер: рынок -> пороги payout/confidence -> пара -> экспирация -> предпросмотр Devsbite -> подтверждение",
+        "/signal_mvp - открыть inline-мастер: канал -> рынок -> пороги payout/confidence -> пара -> экспирация -> предпросмотр Devsbite -> подтверждение",
         "/signal_mvp now - тот же мастер, но после подтверждения старт будет через 15 секунд для быстрой проверки воркера",
         "",
         "<b>Управление торговыми сессиями</b>",
@@ -290,7 +291,7 @@ def format_admin_help(total_users: int, segment_counts: dict[str, int]) -> str:
         "/signal_stop ID - остановить running-сессию и отменить будущие jobs",
         "Отмена/остановка не удаляет уже опубликованные сообщения в канале, но прекращает дальнейшие публикации по этой сессии.",
         "",
-        "Сейчас MVP работает по Forex/OTC/MIXED-парам из ТЗ. После выбора рынка админ выбирает минимальные payout и confidence. Затем бот показывает пары, отфильтрованные по payout, и предпросмотр Devsbite: signal, API confidence, payout, цену входа, decision_source/reason и TV/TD. В канал сообщение уходит только после кнопки подтверждения. Кнопка «Назад» возвращает к выбору пары.",
+        "Сейчас MVP работает по Forex/OTC/MIXED-парам из ТЗ. Сначала админ выбирает канал из добавленных через /channel_add, затем рынок и минимальные payout/confidence. После этого бот показывает пары, отфильтрованные по payout, и предпросмотр Devsbite: signal, API confidence, payout, цену входа, decision_source/reason и TV/TD. В выбранный канал сообщение уходит только после кнопки подтверждения. Кнопка «Назад» возвращает к выбору пары.",
         "",
         "<b>Как отправлять рассылки</b>",
         "<b>1. HTML-текст:</b>",
@@ -425,20 +426,58 @@ def signal_callback(action: str, *parts: object) -> str:
     return ":".join(["admin_signal", action, *[str(part) for part in parts]])
 
 
-def signal_market_keyboard(fast: bool) -> dict[str, Any]:
+def get_active_signal_channels(db: Session) -> list[TelegramSignalChannel]:
+    return (
+        db.query(TelegramSignalChannel)
+        .filter(TelegramSignalChannel.is_active.is_(True))
+        .order_by(TelegramSignalChannel.id.desc())
+        .all()
+    )
+
+
+def signal_channel_keyboard(db: Session, fast: bool) -> dict[str, Any]:
+    fast_token = "1" if fast else "0"
+    rows: list[list[dict[str, str]]] = []
+    for channel in get_active_signal_channels(db):
+        title = channel.title or str(channel.chat_id)
+        rows.append(
+            [
+                {
+                    "text": f"{title[:32]} · {channel.chat_id}",
+                    "callback_data": signal_callback("channel", channel.chat_id, fast_token),
+                }
+            ]
+        )
+
+    if settings.telegram_signals_channel_id.strip():
+        rows.append(
+            [
+                {
+                    "text": f"ENV канал · {settings.telegram_signals_channel_id.strip()}",
+                    "callback_data": signal_callback("channel", settings.telegram_signals_channel_id.strip(), fast_token),
+                }
+            ]
+        )
+
+    if not rows:
+        rows.append([{"text": "Сначала добавь канал через /channel_add", "callback_data": signal_callback("noop")}])
+    return {"inline_keyboard": rows}
+
+
+def signal_market_keyboard(channel_id: int, fast: bool) -> dict[str, Any]:
     fast_token = "1" if fast else "0"
     return {
         "inline_keyboard": [
             [
-                {"text": "FOREX", "callback_data": signal_callback("market", "FOREX", fast_token)},
-                {"text": "OTC", "callback_data": signal_callback("market", "OTC", fast_token)},
-                {"text": "MIXED", "callback_data": signal_callback("market", "MIXED", fast_token)},
+                {"text": "FOREX", "callback_data": signal_callback("market", channel_id, "FOREX", fast_token)},
+                {"text": "OTC", "callback_data": signal_callback("market", channel_id, "OTC", fast_token)},
+                {"text": "MIXED", "callback_data": signal_callback("market", channel_id, "MIXED", fast_token)},
             ]
         ]
     }
 
 
-def signal_payout_keyboard(market_mode: str, fast: bool) -> dict[str, Any]:
+def signal_payout_keyboard(channel_id: int, market_mode: str, fast: bool) -> dict[str, Any]:
     fast_token = "1" if fast else "0"
     rows: list[list[dict[str, str]]] = []
     current_row: list[dict[str, str]] = []
@@ -446,7 +485,7 @@ def signal_payout_keyboard(market_mode: str, fast: bool) -> dict[str, Any]:
         current_row.append(
             {
                 "text": f"{payout}%",
-                "callback_data": signal_callback("payout", market_mode, payout, fast_token),
+                "callback_data": signal_callback("payout", channel_id, market_mode, payout, fast_token),
             }
         )
         if len(current_row) == 3:
@@ -454,11 +493,11 @@ def signal_payout_keyboard(market_mode: str, fast: bool) -> dict[str, Any]:
             current_row = []
     if current_row:
         rows.append(current_row)
-    rows.append([{"text": "⬅️ Назад к выбору рынка", "callback_data": signal_callback("markets", fast_token)}])
+    rows.append([{"text": "⬅️ Назад к выбору рынка", "callback_data": signal_callback("markets", channel_id, fast_token)}])
     return {"inline_keyboard": rows}
 
 
-def signal_confidence_keyboard(market_mode: str, min_payout: int, fast: bool) -> dict[str, Any]:
+def signal_confidence_keyboard(channel_id: int, market_mode: str, min_payout: int, fast: bool) -> dict[str, Any]:
     fast_token = "1" if fast else "0"
     rows: list[list[dict[str, str]]] = []
     current_row: list[dict[str, str]] = []
@@ -466,7 +505,7 @@ def signal_confidence_keyboard(market_mode: str, min_payout: int, fast: bool) ->
         current_row.append(
             {
                 "text": f"{confidence}%",
-                "callback_data": signal_callback("confidence", market_mode, min_payout, confidence, fast_token),
+                "callback_data": signal_callback("confidence", channel_id, market_mode, min_payout, confidence, fast_token),
             }
         )
         if len(current_row) == 3:
@@ -474,11 +513,17 @@ def signal_confidence_keyboard(market_mode: str, min_payout: int, fast: bool) ->
             current_row = []
     if current_row:
         rows.append(current_row)
-    rows.append([{"text": "⬅️ Назад к payout", "callback_data": signal_callback("market", market_mode, fast_token)}])
+    rows.append([{"text": "⬅️ Назад к payout", "callback_data": signal_callback("market", channel_id, market_mode, fast_token)}])
     return {"inline_keyboard": rows}
 
 
-def signal_pair_keyboard(market_mode: str, fast: bool, min_payout: int = MVP_MIN_PAYOUT, min_confidence: int = MVP_MIN_CONFIDENCE) -> dict[str, Any]:
+def signal_pair_keyboard(
+    channel_id: int,
+    market_mode: str,
+    fast: bool,
+    min_payout: int = MVP_MIN_PAYOUT,
+    min_confidence: int = MVP_MIN_CONFIDENCE,
+) -> dict[str, Any]:
     rows: list[list[dict[str, str]]] = []
     current_row: list[dict[str, str]] = []
     fast_token = "1" if fast else "0"
@@ -490,6 +535,7 @@ def signal_pair_keyboard(market_mode: str, fast: bool, min_payout: int = MVP_MIN
                 "text": f"{pair.flag_1}{pair.flag_2} {pair.symbol} · {payout}%",
                 "callback_data": signal_callback(
                     "pair",
+                    channel_id,
                     normalized_market_mode,
                     min_payout,
                     min_confidence,
@@ -517,7 +563,7 @@ def signal_pair_keyboard(market_mode: str, fast: bool, min_payout: int = MVP_MIN
                 [
                     {
                         "text": "Перейти к OTC",
-                        "callback_data": signal_callback("market", "OTC", fast_token),
+                        "callback_data": signal_callback("market", channel_id, "OTC", fast_token),
                     }
                 ]
             )
@@ -530,11 +576,12 @@ def signal_pair_keyboard(market_mode: str, fast: bool, min_payout: int = MVP_MIN
                     }
                 ]
             )
-    rows.append([{"text": "⬅️ Назад к confidence", "callback_data": signal_callback("payout", normalized_market_mode, min_payout, fast_token)}])
+    rows.append([{"text": "⬅️ Назад к confidence", "callback_data": signal_callback("payout", channel_id, normalized_market_mode, min_payout, fast_token)}])
     return {"inline_keyboard": rows}
 
 
 def signal_expiry_keyboard(
+    channel_id: int,
     market_mode: str,
     pair_code: str,
     fast: bool,
@@ -551,6 +598,7 @@ def signal_expiry_keyboard(
                 "text": f"{expiry}m",
                 "callback_data": signal_callback(
                     "expiry",
+                    channel_id,
                     normalized_market_mode,
                     min_payout,
                     min_confidence,
@@ -569,14 +617,14 @@ def signal_expiry_keyboard(
         [
             {
                 "text": "⬅️ Назад к выбору пар",
-                "callback_data": signal_callback("back", normalized_market_mode, min_payout, min_confidence, fast_token),
+                "callback_data": signal_callback("back", channel_id, normalized_market_mode, min_payout, min_confidence, fast_token),
             }
         ]
     )
     return {"inline_keyboard": rows}
 
 
-def send_signal_market_menu(client: httpx.Client, chat_id: int, *, fast: bool) -> None:
+def send_signal_channel_menu(client: httpx.Client, chat_id: int, db: Session, *, fast: bool) -> None:
     mode_text = "быстрый тест: старт через 15 секунд" if fast else "обычный режим: старт через 60 минут"
     send_message(
         client,
@@ -584,26 +632,44 @@ def send_signal_market_menu(client: httpx.Client, chat_id: int, *, fast: bool) -
         (
             "<b>MVP торговая сессия</b>\n\n"
             f"Режим: <b>{mode_text}</b>\n"
-            "Выберите режим рынка из списка."
+            "Выберите канал, куда отправить торговую сессию."
         ),
         parse_mode="HTML",
-        reply_markup=signal_market_keyboard(fast),
+        reply_markup=signal_channel_keyboard(db, fast),
         disable_web_page_preview=True,
     ).raise_for_status()
 
 
-def send_signal_payout_menu(client: httpx.Client, chat_id: int, *, market_mode: str, fast: bool) -> None:
+def send_signal_market_menu(client: httpx.Client, chat_id: int, *, channel_id: int, fast: bool) -> None:
+    mode_text = "быстрый тест: старт через 15 секунд" if fast else "обычный режим: старт через 60 минут"
+    send_message(
+        client,
+        chat_id,
+        (
+            "<b>MVP торговая сессия</b>\n\n"
+            f"Канал: <code>{channel_id}</code>\n"
+            f"Режим: <b>{mode_text}</b>\n"
+            "Выберите режим рынка из списка."
+        ),
+        parse_mode="HTML",
+        reply_markup=signal_market_keyboard(channel_id, fast),
+        disable_web_page_preview=True,
+    ).raise_for_status()
+
+
+def send_signal_payout_menu(client: httpx.Client, chat_id: int, *, channel_id: int, market_mode: str, fast: bool) -> None:
     normalized_market_mode = normalize_mvp_market_mode(market_mode)
     send_message(
         client,
         chat_id,
         (
             "<b>MVP торговая сессия</b>\n\n"
+            f"Канал: <code>{channel_id}</code>\n"
             f"Режим рынка: <b>{normalized_market_mode}</b>\n"
             "Выберите минимальный payout для фильтрации пар."
         ),
         parse_mode="HTML",
-        reply_markup=signal_payout_keyboard(normalized_market_mode, fast),
+        reply_markup=signal_payout_keyboard(channel_id, normalized_market_mode, fast),
         disable_web_page_preview=True,
     ).raise_for_status()
 
@@ -612,6 +678,7 @@ def send_signal_confidence_menu(
     client: httpx.Client,
     chat_id: int,
     *,
+    channel_id: int,
     market_mode: str,
     min_payout: int,
     fast: bool,
@@ -622,12 +689,13 @@ def send_signal_confidence_menu(
         chat_id,
         (
             "<b>MVP торговая сессия</b>\n\n"
+            f"Канал: <code>{channel_id}</code>\n"
             f"Режим рынка: <b>{normalized_market_mode}</b>\n"
             f"Min payout: <b>{min_payout}%</b>\n"
             "Выберите минимальный confidence от Devsbite."
         ),
         parse_mode="HTML",
-        reply_markup=signal_confidence_keyboard(normalized_market_mode, min_payout, fast),
+        reply_markup=signal_confidence_keyboard(channel_id, normalized_market_mode, min_payout, fast),
         disable_web_page_preview=True,
     ).raise_for_status()
 
@@ -636,6 +704,7 @@ def send_signal_pair_menu(
     client: httpx.Client,
     chat_id: int,
     *,
+    channel_id: int,
     market_mode: str = "FOREX",
     fast: bool,
     min_payout: int = MVP_MIN_PAYOUT,
@@ -653,6 +722,7 @@ def send_signal_pair_menu(
         chat_id,
         (
             "<b>MVP торговая сессия</b>\n\n"
+            f"Канал: <code>{channel_id}</code>\n"
             f"Режим рынка: <b>{normalized_market_mode}</b>\n"
             f"Min payout: <b>{min_payout}%</b>\n"
             f"Min confidence: <b>{min_confidence}%</b>\n"
@@ -660,7 +730,7 @@ def send_signal_pair_menu(
             f"{market_note}"
         ),
         parse_mode="HTML",
-        reply_markup=signal_pair_keyboard(normalized_market_mode, fast, min_payout, min_confidence),
+        reply_markup=signal_pair_keyboard(channel_id, normalized_market_mode, fast, min_payout, min_confidence),
         disable_web_page_preview=True,
     ).raise_for_status()
 
@@ -668,6 +738,7 @@ def send_signal_pair_menu(
 def send_signal_expiry_menu(
     client: httpx.Client,
     chat_id: int,
+    channel_id: int,
     market_mode: str,
     pair_code: str,
     *,
@@ -682,6 +753,7 @@ def send_signal_expiry_menu(
         chat_id,
         (
             "<b>MVP торговая сессия</b>\n\n"
+            f"Канал: <code>{channel_id}</code>\n"
             f"Режим рынка: <b>{normalized_market_mode}</b>\n"
             f"Min payout: <b>{min_payout}%</b>\n"
             f"Min confidence: <b>{min_confidence}%</b>\n"
@@ -689,23 +761,25 @@ def send_signal_expiry_menu(
             "Выберите экспирацию для предпросмотра Devsbite."
         ),
         parse_mode="HTML",
-        reply_markup=signal_expiry_keyboard(normalized_market_mode, pair_code, fast, min_payout, min_confidence),
+        reply_markup=signal_expiry_keyboard(channel_id, normalized_market_mode, pair_code, fast, min_payout, min_confidence),
         disable_web_page_preview=True,
     ).raise_for_status()
 
 
-def signal_error_keyboard(market_mode: str | None, fast: bool) -> dict[str, Any] | None:
+def signal_error_keyboard(market_mode: str | None, fast: bool, channel_id: int | None = None) -> dict[str, Any] | None:
     fast_token = "1" if fast else "0"
+    if channel_id is None:
+        return None
     if market_mode is None:
         return {
             "inline_keyboard": [
-                [{"text": "⬅️ Назад к выбору рынка", "callback_data": signal_callback("markets", fast_token)}]
+                [{"text": "⬅️ Назад к выбору рынка", "callback_data": signal_callback("markets", channel_id, fast_token)}]
             ]
         }
 
     return {
         "inline_keyboard": [
-            [{"text": "⬅️ Назад к выбору пар", "callback_data": signal_callback("back", market_mode, fast_token)}]
+            [{"text": "⬅️ Назад к выбору пар", "callback_data": signal_callback("back", channel_id, market_mode, MVP_MIN_PAYOUT, MVP_MIN_CONFIDENCE, fast_token)}]
         ]
     }
 
@@ -717,6 +791,7 @@ def send_signal_callback_error(
     error: Exception,
     *,
     market_mode: str | None = None,
+    channel_id: int | None = None,
     fast: bool = False,
 ) -> None:
     detail = escape(str(error))
@@ -729,7 +804,7 @@ def send_signal_callback_error(
         f"Причина: <code>{detail}</code>\n\n"
         "Выбери другую пару или вернись назад."
     )
-    reply_markup = signal_error_keyboard(market_mode, fast)
+    reply_markup = signal_error_keyboard(market_mode, fast, channel_id)
 
     if message_id is None:
         send_message(
@@ -785,6 +860,7 @@ def format_signal_preview(preview: dict) -> str:
     td_recommendation = escape(str(analysis.get("td_recommendation") or "-"))
     price_text = escape(str(price)) if price is not None else "-"
     market_mode = escape(str(preview.get("market_mode") or pair.market_type))
+    channel_id = escape(str(preview.get("channel_id") or "-"))
     analysis_symbol = escape(str(preview.get("analysis_symbol") or pair.symbol))
     min_payout = escape(str(preview.get("min_payout", MVP_MIN_PAYOUT)))
     min_confidence = escape(str(preview.get("min_confidence", MVP_MIN_CONFIDENCE)))
@@ -801,6 +877,7 @@ def format_signal_preview(preview: dict) -> str:
 
     return (
         "<b>Предпросмотр Devsbite</b>\n\n"
+        f"Канал: <code>{channel_id}</code>\n"
         f"Режим рынка: <b>{market_mode}</b>\n"
         f"Тип пары: <b>{escape(pair.market_type)}</b>\n"
         f"Пара: <b>{escape(pair.symbol)}</b>\n"
@@ -857,6 +934,7 @@ def signal_preview_keyboard(preview_token: str, fast: bool, *, can_confirm: bool
 def send_signal_preview(
     client: httpx.Client,
     chat_id: int,
+    channel_id: int,
     market_mode: str,
     pair_code: str,
     expiry_minutes: int,
@@ -875,6 +953,7 @@ def send_signal_preview(
         min_payout=min_payout,
         min_confidence=min_confidence,
     )
+    preview["channel_id"] = channel_id
     preview["market_mode"] = normalized_market_mode
     preview_token = uuid4().hex
     ADMIN_SIGNAL_PREVIEWS[preview_token] = preview
@@ -948,76 +1027,103 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
         action = ""
         parts: list[str] = []
         error_market_mode: str | None = None
+        error_channel_id: int | None = None
         error_fast = False
         try:
             _, action, *parts = data.split(":")
             if action == "noop":
                 callback_text = "Нет доступных пар"
+            elif action == "channel":
+                channel_id = int(parts[0])
+                error_channel_id = channel_id
+                fast = len(parts) > 1 and parts[1] == "1"
+                error_fast = fast
+                send_signal_market_menu(client, chat_id, channel_id=channel_id, fast=fast)
             elif action == "markets":
-                fast = bool(parts and parts[0] == "1")
-                send_signal_market_menu(client, chat_id, fast=fast)
+                channel_id = int(parts[0])
+                error_channel_id = channel_id
+                fast = len(parts) > 1 and parts[1] == "1"
+                error_fast = fast
+                send_signal_market_menu(client, chat_id, channel_id=channel_id, fast=fast)
             elif action == "back":
-                if len(parts) >= 4 and parts[0] in MVP_MARKET_MODES:
-                    market_mode = parts[0]
-                    min_payout = int(parts[1])
-                    min_confidence = int(parts[2])
-                    fast = parts[3] == "1"
+                if len(parts) >= 5 and parts[1] in MVP_MARKET_MODES:
+                    channel_id = int(parts[0])
+                    error_channel_id = channel_id
+                    market_mode = parts[1]
+                    min_payout = int(parts[2])
+                    min_confidence = int(parts[3])
+                    fast = parts[4] == "1"
                     error_market_mode = market_mode
                     error_fast = fast
                     send_signal_pair_menu(
                         client,
                         chat_id,
+                        channel_id=channel_id,
                         market_mode=market_mode,
                         fast=fast,
                         min_payout=min_payout,
                         min_confidence=min_confidence,
                     )
                 else:
-                    fast = bool(parts and parts[0] == "1")
+                    channel_id = int(parts[0]) if parts else 0
+                    error_channel_id = channel_id if channel_id else None
+                    fast = len(parts) > 1 and parts[1] == "1"
                     error_fast = fast
-                    send_signal_market_menu(client, chat_id, fast=fast)
+                    send_signal_market_menu(client, chat_id, channel_id=channel_id, fast=fast)
             elif action == "market":
-                market_mode = normalize_mvp_market_mode(parts[0])
-                fast = len(parts) > 1 and parts[1] == "1"
+                channel_id = int(parts[0])
+                error_channel_id = channel_id
+                market_mode = normalize_mvp_market_mode(parts[1])
+                fast = len(parts) > 2 and parts[2] == "1"
                 error_market_mode = market_mode
                 error_fast = fast
-                send_signal_payout_menu(client, chat_id, market_mode=market_mode, fast=fast)
+                send_signal_payout_menu(client, chat_id, channel_id=channel_id, market_mode=market_mode, fast=fast)
             elif action == "payout":
-                market_mode = normalize_mvp_market_mode(parts[0])
-                min_payout = int(parts[1])
-                fast = len(parts) > 2 and parts[2] == "1"
+                channel_id = int(parts[0])
+                error_channel_id = channel_id
+                market_mode = normalize_mvp_market_mode(parts[1])
+                min_payout = int(parts[2])
+                fast = len(parts) > 3 and parts[3] == "1"
                 error_market_mode = market_mode
                 error_fast = fast
                 send_signal_confidence_menu(
                     client,
                     chat_id,
+                    channel_id=channel_id,
                     market_mode=market_mode,
                     min_payout=min_payout,
                     fast=fast,
                 )
             elif action == "confidence":
-                market_mode = normalize_mvp_market_mode(parts[0])
-                min_payout = int(parts[1])
-                min_confidence = int(parts[2])
-                fast = len(parts) > 3 and parts[3] == "1"
+                channel_id = int(parts[0])
+                error_channel_id = channel_id
+                market_mode = normalize_mvp_market_mode(parts[1])
+                min_payout = int(parts[2])
+                min_confidence = int(parts[3])
+                fast = len(parts) > 4 and parts[4] == "1"
                 error_market_mode = market_mode
                 error_fast = fast
                 send_signal_pair_menu(
                     client,
                     chat_id,
+                    channel_id=channel_id,
                     market_mode=market_mode,
                     fast=fast,
                     min_payout=min_payout,
                     min_confidence=min_confidence,
                 )
             elif action == "pair":
-                if len(parts) >= 5 and parts[0] in MVP_MARKET_MODES:
-                    market_mode = normalize_mvp_market_mode(parts[0])
-                    min_payout = int(parts[1])
-                    min_confidence = int(parts[2])
-                    pair_code = parts[3]
-                    fast = parts[4] == "1"
+                if len(parts) >= 6 and parts[1] in MVP_MARKET_MODES:
+                    channel_id = int(parts[0])
+                    error_channel_id = channel_id
+                    market_mode = normalize_mvp_market_mode(parts[1])
+                    min_payout = int(parts[2])
+                    min_confidence = int(parts[3])
+                    pair_code = parts[4]
+                    fast = parts[5] == "1"
                 else:
+                    channel_id = get_signals_channel_id(db)
+                    error_channel_id = channel_id
                     market_mode = "FOREX"
                     min_payout = MVP_MIN_PAYOUT
                     min_confidence = MVP_MIN_CONFIDENCE
@@ -1026,6 +1132,7 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                 send_signal_expiry_menu(
                     client,
                     chat_id,
+                    channel_id,
                     market_mode,
                     pair_code,
                     fast=fast,
@@ -1033,14 +1140,18 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                     min_confidence=min_confidence,
                 )
             elif action == "expiry":
-                if len(parts) >= 6 and parts[0] in MVP_MARKET_MODES:
-                    market_mode = normalize_mvp_market_mode(parts[0])
-                    min_payout = int(parts[1])
-                    min_confidence = int(parts[2])
-                    pair_code = parts[3]
-                    expiry_minutes = int(parts[4])
-                    fast = parts[5] == "1"
+                if len(parts) >= 7 and parts[1] in MVP_MARKET_MODES:
+                    channel_id = int(parts[0])
+                    error_channel_id = channel_id
+                    market_mode = normalize_mvp_market_mode(parts[1])
+                    min_payout = int(parts[2])
+                    min_confidence = int(parts[3])
+                    pair_code = parts[4]
+                    expiry_minutes = int(parts[5])
+                    fast = parts[6] == "1"
                 else:
+                    channel_id = get_signals_channel_id(db)
+                    error_channel_id = channel_id
                     market_mode = "FOREX"
                     min_payout = MVP_MIN_PAYOUT
                     min_confidence = MVP_MIN_CONFIDENCE
@@ -1052,6 +1163,7 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                 send_signal_preview(
                     client,
                     chat_id,
+                    channel_id,
                     market_mode,
                     pair_code,
                     expiry_minutes,
@@ -1064,11 +1176,13 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                 fast = len(parts) > 1 and parts[1] == "1"
                 preview = ADMIN_SIGNAL_PREVIEWS.get(preview_token)
                 market_mode = preview.get("market_mode", "FOREX") if preview else "FOREX"
+                channel_id = int(preview.get("channel_id", get_signals_channel_id(db))) if preview else get_signals_channel_id(db)
                 min_payout = int(preview.get("min_payout", MVP_MIN_PAYOUT)) if preview else MVP_MIN_PAYOUT
                 min_confidence = int(preview.get("min_confidence", MVP_MIN_CONFIDENCE)) if preview else MVP_MIN_CONFIDENCE
                 send_signal_pair_menu(
                     client,
                     chat_id,
+                    channel_id=channel_id,
                     market_mode=market_mode,
                     fast=fast,
                     min_payout=min_payout,
@@ -1088,6 +1202,7 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                 send_signal_preview(
                     client,
                     chat_id,
+                    int(preview.get("channel_id", get_signals_channel_id(db))),
                     str(preview.get("market_mode", "FOREX")),
                     pair.code,
                     int(preview["expiry_minutes"]),
@@ -1118,6 +1233,7 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                     db,
                     created_by_telegram_id=user.get("id"),
                     start_at=start_at,
+                    channel_id=int(preview.get("channel_id", get_signals_channel_id(db))),
                     pair=preview["pair"],
                     market_mode=preview.get("market_mode", "FOREX"),
                     expiry_minutes=preview["expiry_minutes"],
@@ -1143,6 +1259,10 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                 if parts[0] in MVP_MARKET_MODES:
                     error_market_mode = normalize_mvp_market_mode(parts[0])
                     error_fast = len(parts) > 3 and parts[3] == "1"
+                elif len(parts) > 1 and parts[1] in MVP_MARKET_MODES:
+                    error_channel_id = int(parts[0])
+                    error_market_mode = normalize_mvp_market_mode(parts[1])
+                    error_fast = len(parts) > 4 and parts[4] == "1"
                 else:
                     error_market_mode = "FOREX"
                     error_fast = len(parts) > 2 and parts[2] == "1"
@@ -1152,6 +1272,7 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                 message_id if isinstance(message_id, int) else None,
                 error,
                 market_mode=error_market_mode,
+                channel_id=error_channel_id,
                 fast=error_fast,
             )
 
@@ -1196,7 +1317,7 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
             return True
 
         if command_name == "/signal_mvp":
-            send_signal_market_menu(client, chat_id, fast=command_body.strip() == "now")
+            send_signal_channel_menu(client, chat_id, db, fast=command_body.strip() == "now")
             return True
 
         if command_name == "/signal_sessions":
