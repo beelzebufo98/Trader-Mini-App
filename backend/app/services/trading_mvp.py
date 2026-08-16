@@ -819,13 +819,14 @@ def validate_mvp_session_inputs(
     }
 
 
-def cancel_open_channel_sessions(db: Session, channel_id: int) -> int:
+def cancel_open_sessions(db: Session, *, channel_id: int | None = None) -> int:
+    filters = [TradingSession.status.in_(ACTIVE_SESSION_STATUSES)]
+    if channel_id is not None:
+        filters.append(TradingSession.channel_id == channel_id)
+
     open_sessions = (
         db.query(TradingSession)
-        .filter(
-            TradingSession.channel_id == channel_id,
-            TradingSession.status.in_(ACTIVE_SESSION_STATUSES),
-        )
+        .filter(*filters)
         .all()
     )
     if not open_sessions:
@@ -856,7 +857,7 @@ def cancel_open_channel_sessions(db: Session, channel_id: int) -> int:
     ).update(
         {
             "status": "cancelled",
-            "last_error": "Cancelled because a newer MVP session was created for this channel.",
+            "last_error": "Cancelled because a newer MVP session was created.",
             "lock_token": "",
             "locked_at": None,
             "updated_at": now,
@@ -864,6 +865,10 @@ def cancel_open_channel_sessions(db: Session, channel_id: int) -> int:
         synchronize_session=False,
     )
     return len(open_sessions)
+
+
+def cancel_open_channel_sessions(db: Session, channel_id: int) -> int:
+    return cancel_open_sessions(db, channel_id=channel_id)
 
 
 def cancel_trading_session(
