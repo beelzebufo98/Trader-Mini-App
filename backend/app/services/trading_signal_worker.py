@@ -298,6 +298,7 @@ def _execute_session_soon(db: Session, client: httpx.Client, job: TradingSignalJ
     minutes_before = int((job.payload or {}).get("minutes_before", 60))
     message_id = send_session_soon(
         client,
+        chat_id=int(session.channel_id),
         market_type=session.market_mode,
         session_start_time=session.starts_at,
         minutes_before=minutes_before,
@@ -317,6 +318,7 @@ def _execute_signal_countdown(db: Session, client: httpx.Client, job: TradingSig
     seconds_before = int((job.payload or {}).get("seconds_before", 60))
     message_id = send_signal_countdown(
         client,
+        chat_id=int(signal.channel_id),
         asset=_signal_asset(signal),
         entry_time=signal.entry_time or datetime.utcnow(),
         expiry_seconds=signal.expiry_seconds,
@@ -340,7 +342,7 @@ def _execute_signal_entry(db: Session, client: httpx.Client, job: TradingSignalJ
             attempt.entry_price = entry_price
             attempt.quote_snapshot = quote_payload
 
-    message_id = send_signal_entry(client, _signal_entry(signal, attempt))
+    message_id = send_signal_entry(client, int(signal.channel_id), _signal_entry(signal, attempt))
     signal.signal_message_id = message_id
     signal.status = "active"
     if attempt is not None:
@@ -415,7 +417,12 @@ def _execute_signal_result(db: Session, client: httpx.Client, job: TradingSignal
         db.add(next_attempt)
         db.flush()
 
-        overlap_message_id = send_overlap(client, _signal_entry(signal, next_attempt), attempt_no=next_attempt_no)
+        overlap_message_id = send_overlap(
+            client,
+            int(signal.channel_id),
+            _signal_entry(signal, next_attempt),
+            attempt_no=next_attempt_no,
+        )
         next_attempt.entry_message_id = overlap_message_id
         signal.current_attempt_no = next_attempt_no
         signal.entry_price = next_entry_price
@@ -437,7 +444,7 @@ def _execute_signal_result(db: Session, client: httpx.Client, job: TradingSignal
         db.flush()
         return
 
-    message_id = send_signal_result(client, outcome)
+    message_id = send_signal_result(client, int(signal.channel_id), outcome)
 
     signal.result = result
     signal.result_message_id = message_id
@@ -616,6 +623,7 @@ def _execute_session_finished(db: Session, client: httpx.Client, job: TradingSig
 
     message_id = send_session_finished(
         client,
+        chat_id=int(session.channel_id),
         market_type=session.market_mode,
         session_start_time=session.starts_at,
         session_end_time=session.ends_at,

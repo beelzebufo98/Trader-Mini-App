@@ -6,7 +6,6 @@ from typing import Literal
 
 import httpx
 
-from app.config import settings
 from app.services.signal_time import format_signal_time
 from app.telegram.client import send_message, send_photo
 
@@ -44,13 +43,6 @@ class SignalOutcome:
     entry_price: float | None = None
     close_price: float | None = None
     chart_image_path: Path | None = None
-
-
-def signals_channel_id() -> int:
-    value = settings.telegram_signals_channel_id.strip()
-    if not value:
-        raise RuntimeError("TELEGRAM_SIGNALS_CHANNEL_ID is not configured")
-    return int(value)
 
 
 def format_time(value: datetime) -> str:
@@ -120,11 +112,11 @@ def image_path(name: str) -> Path | None:
 
 def send_channel_html(
     client: httpx.Client,
+    chat_id: int,
     text: str,
     *,
     photo_path: Path | None = None,
 ) -> int | None:
-    chat_id = signals_channel_id()
     if photo_path is not None and photo_path.exists():
         try:
             response = send_photo(client, chat_id, photo_path, caption=text, parse_mode="HTML")
@@ -144,6 +136,7 @@ def send_channel_html(
 def send_session_soon(
     client: httpx.Client,
     *,
+    chat_id: int,
     market_type: str,
     session_start_time: datetime,
     minutes_before: int = 60,
@@ -157,12 +150,13 @@ def send_session_soon(
         "— стабильное соединение 📶\n\n"
         "Готовьтесь — скоро начинаем! 🔥"
     )
-    return send_channel_html(client, text, photo_path=image_path("1-HOUR-SESSION.png"))
+    return send_channel_html(client, chat_id, text, photo_path=image_path("1-HOUR-SESSION.png"))
 
 
 def send_signal_countdown(
     client: httpx.Client,
     *,
+    chat_id: int,
     asset: SignalAsset,
     entry_time: datetime,
     expiry_seconds: int,
@@ -175,10 +169,10 @@ def send_signal_countdown(
         f"⏱ Экспирация: <b>{format_expiry(expiry_seconds)}</b>\n\n"
         "⚠️ Подготовьте терминал. Направление сделки будет опубликовано через 60 секунд."
     )
-    return send_channel_html(client, text)
+    return send_channel_html(client, chat_id, text)
 
 
-def send_signal_entry(client: httpx.Client, signal: SignalEntry) -> int | None:
+def send_signal_entry(client: httpx.Client, chat_id: int, signal: SignalEntry) -> int | None:
     text = (
         f"⚡ <b>СИГНАЛ ПО {escape(market_symbol(signal.asset))}</b>\n\n"
         f"{escape(asset_market_line(signal.asset))}\n"
@@ -188,11 +182,12 @@ def send_signal_entry(client: httpx.Client, signal: SignalEntry) -> int | None:
         f"💲 Цена входа: <b>{format_price(signal.entry_price)}</b>"
     )
     photo_name = "SESSION-BUY.png" if signal.direction == "BUY" else "SESSION-SELL.jpg"
-    return send_channel_html(client, text, photo_path=image_path(photo_name))
+    return send_channel_html(client, chat_id, text, photo_path=image_path(photo_name))
 
 
 def send_overlap(
     client: httpx.Client,
+    chat_id: int,
     signal: SignalEntry,
     *,
     attempt_no: int,
@@ -216,19 +211,19 @@ def send_overlap(
         f"💲 Цена входа: <b>{format_price(signal.entry_price)}</b>\n"
         f"{direction_emoji(signal.direction)} <b>{direction_label(signal.direction)}</b>"
     )
-    return send_channel_html(client, text)
+    return send_channel_html(client, chat_id, text)
 
 
-def send_refund(client: httpx.Client, signal: SignalEntry) -> int | None:
+def send_refund(client: httpx.Client, chat_id: int, signal: SignalEntry) -> int | None:
     text = (
         "🔄 <b>Возврат средств</b>\n\n"
         f"{escape(asset_market_line(signal.asset))}\n\n"
         "Фиксируем возврат и повторяем вход без повышения уровня."
     )
-    return send_channel_html(client, text)
+    return send_channel_html(client, chat_id, text)
 
 
-def send_signal_result(client: httpx.Client, outcome: SignalOutcome) -> int | None:
+def send_signal_result(client: httpx.Client, chat_id: int, outcome: SignalOutcome) -> int | None:
     if outcome.result == "WIN":
         text = (
             "✅ <b>СИГНАЛ ОТРАБОТАН В ПЛЮС</b>\n\n"
@@ -243,12 +238,13 @@ def send_signal_result(client: httpx.Client, outcome: SignalOutcome) -> int | No
             "Фиксируем результат, идём дальше."
         )
 
-    return send_channel_html(client, text, photo_path=outcome.chart_image_path)
+    return send_channel_html(client, chat_id, text, photo_path=outcome.chart_image_path)
 
 
 def send_session_finished(
     client: httpx.Client,
     *,
+    chat_id: int,
     market_type: str,
     session_start_time: datetime,
     session_end_time: datetime,
@@ -264,4 +260,4 @@ def send_session_finished(
         f"✅ Плюсы: <b>{wins}</b>\n"
         f"❌ Минусы: <b>{losses}</b>"
     )
-    return send_channel_html(client, text, photo_path=image_path("SESSION-FINISH.png"))
+    return send_channel_html(client, chat_id, text, photo_path=image_path("SESSION-FINISH.png"))

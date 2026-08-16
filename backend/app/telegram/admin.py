@@ -449,16 +449,6 @@ def signal_channel_keyboard(db: Session, fast: bool) -> dict[str, Any]:
             ]
         )
 
-    if settings.telegram_signals_channel_id.strip():
-        rows.append(
-            [
-                {
-                    "text": f"ENV канал · {settings.telegram_signals_channel_id.strip()}",
-                    "callback_data": signal_callback("channel", settings.telegram_signals_channel_id.strip(), fast_token),
-                }
-            ]
-        )
-
     if not rows:
         rows.append([{"text": "Сначала добавь канал через /channel_add", "callback_data": signal_callback("noop")}])
     return {"inline_keyboard": rows}
@@ -1040,9 +1030,13 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                 error_fast = fast
                 send_signal_market_menu(client, chat_id, channel_id=channel_id, fast=fast)
             elif action == "markets":
-                channel_id = int(parts[0])
+                if len(parts) == 1:
+                    channel_id = get_signals_channel_id(db)
+                    fast = parts[0] == "1"
+                else:
+                    channel_id = int(parts[0])
+                    fast = len(parts) > 1 and parts[1] == "1"
                 error_channel_id = channel_id
-                fast = len(parts) > 1 and parts[1] == "1"
                 error_fast = fast
                 send_signal_market_menu(client, chat_id, channel_id=channel_id, fast=fast)
             elif action == "back":
@@ -1064,26 +1058,55 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                         min_payout=min_payout,
                         min_confidence=min_confidence,
                     )
+                elif len(parts) >= 4 and parts[0] in MVP_MARKET_MODES:
+                    channel_id = get_signals_channel_id(db)
+                    error_channel_id = channel_id
+                    market_mode = parts[0]
+                    min_payout = int(parts[1])
+                    min_confidence = int(parts[2])
+                    fast = parts[3] == "1"
+                    error_market_mode = market_mode
+                    error_fast = fast
+                    send_signal_pair_menu(
+                        client,
+                        chat_id,
+                        channel_id=channel_id,
+                        market_mode=market_mode,
+                        fast=fast,
+                        min_payout=min_payout,
+                        min_confidence=min_confidence,
+                    )
                 else:
-                    channel_id = int(parts[0]) if parts else 0
-                    error_channel_id = channel_id if channel_id else None
-                    fast = len(parts) > 1 and parts[1] == "1"
+                    channel_id = get_signals_channel_id(db)
+                    error_channel_id = channel_id
+                    fast = bool(parts and parts[0] == "1")
                     error_fast = fast
                     send_signal_market_menu(client, chat_id, channel_id=channel_id, fast=fast)
             elif action == "market":
-                channel_id = int(parts[0])
+                if parts[0] in MVP_MARKET_MODES:
+                    channel_id = get_signals_channel_id(db)
+                    market_mode = normalize_mvp_market_mode(parts[0])
+                    fast = len(parts) > 1 and parts[1] == "1"
+                else:
+                    channel_id = int(parts[0])
+                    market_mode = normalize_mvp_market_mode(parts[1])
+                    fast = len(parts) > 2 and parts[2] == "1"
                 error_channel_id = channel_id
-                market_mode = normalize_mvp_market_mode(parts[1])
-                fast = len(parts) > 2 and parts[2] == "1"
                 error_market_mode = market_mode
                 error_fast = fast
                 send_signal_payout_menu(client, chat_id, channel_id=channel_id, market_mode=market_mode, fast=fast)
             elif action == "payout":
-                channel_id = int(parts[0])
+                if parts[0] in MVP_MARKET_MODES:
+                    channel_id = get_signals_channel_id(db)
+                    market_mode = normalize_mvp_market_mode(parts[0])
+                    min_payout = int(parts[1])
+                    fast = len(parts) > 2 and parts[2] == "1"
+                else:
+                    channel_id = int(parts[0])
+                    market_mode = normalize_mvp_market_mode(parts[1])
+                    min_payout = int(parts[2])
+                    fast = len(parts) > 3 and parts[3] == "1"
                 error_channel_id = channel_id
-                market_mode = normalize_mvp_market_mode(parts[1])
-                min_payout = int(parts[2])
-                fast = len(parts) > 3 and parts[3] == "1"
                 error_market_mode = market_mode
                 error_fast = fast
                 send_signal_confidence_menu(
@@ -1095,12 +1118,19 @@ def handle_admin_callback_query(db: Session, callback_query: dict[str, Any]) -> 
                     fast=fast,
                 )
             elif action == "confidence":
-                channel_id = int(parts[0])
+                if parts[0] in MVP_MARKET_MODES:
+                    channel_id = get_signals_channel_id(db)
+                    market_mode = normalize_mvp_market_mode(parts[0])
+                    min_payout = int(parts[1])
+                    min_confidence = int(parts[2])
+                    fast = len(parts) > 3 and parts[3] == "1"
+                else:
+                    channel_id = int(parts[0])
+                    market_mode = normalize_mvp_market_mode(parts[1])
+                    min_payout = int(parts[2])
+                    min_confidence = int(parts[3])
+                    fast = len(parts) > 4 and parts[4] == "1"
                 error_channel_id = channel_id
-                market_mode = normalize_mvp_market_mode(parts[1])
-                min_payout = int(parts[2])
-                min_confidence = int(parts[3])
-                fast = len(parts) > 4 and parts[4] == "1"
                 error_market_mode = market_mode
                 error_fast = fast
                 send_signal_pair_menu(

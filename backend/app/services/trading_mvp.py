@@ -7,7 +7,6 @@ from typing import Callable, TypeVar
 
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.models.signal_channel import TelegramSignalChannel
 from app.models.trading import TradingSession, TradingSignal, TradingSignalAttempt, TradingSignalJob
 from app.services.devsbite import (
@@ -316,20 +315,19 @@ def _tv_analysis_symbol(pair: MvpPairOption) -> str:
 
 
 def get_signals_channel_id(db: Session | None = None) -> int:
-    if db is not None:
-        active_channel = (
-            db.query(TelegramSignalChannel)
-            .filter(TelegramSignalChannel.is_active.is_(True))
-            .order_by(TelegramSignalChannel.id.desc())
-            .first()
-        )
-        if active_channel is not None:
-            return int(active_channel.chat_id)
+    if db is None:
+        raise TradingMvpConfigError("Signal channel is not selected. Add a channel with /channel_add.")
 
-    value = settings.telegram_signals_channel_id.strip()
-    if not value:
-        raise TradingMvpConfigError("TELEGRAM_SIGNALS_CHANNEL_ID is not configured")
-    return int(value)
+    active_channel = (
+        db.query(TelegramSignalChannel)
+        .filter(TelegramSignalChannel.is_active.is_(True))
+        .order_by(TelegramSignalChannel.id.desc())
+        .first()
+    )
+    if active_channel is not None:
+        return int(active_channel.chat_id)
+
+    raise TradingMvpConfigError("No active signal channel. Add one with /channel_add -100...")
 
 
 def _decimal_or_none(value: float | int | str | None) -> Decimal | None:

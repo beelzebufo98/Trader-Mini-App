@@ -11,7 +11,6 @@ class Settings(BaseSettings):
     telegram_admin_user_ids: str = ""
     telegram_funnel_test_access_code: str = ""
     telegram_source_channel_id: str = ""
-    telegram_signals_channel_id: str = ""
     team_vip_url: str = ""
     pocket_option_partner_id: str = ""
     pocket_option_api_token: str = ""
