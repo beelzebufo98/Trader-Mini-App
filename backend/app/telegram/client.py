@@ -26,6 +26,24 @@ def set_chat_menu_button(client: httpx.Client, chat_id: int, menu_button: dict[s
     )
 
 
+def get_me(client: httpx.Client) -> httpx.Response:
+    return client.post(telegram_api_url("getMe"), json={})
+
+
+def get_chat(client: httpx.Client, chat_id: int) -> httpx.Response:
+    return client.post(telegram_api_url("getChat"), json={"chat_id": chat_id})
+
+
+def get_chat_member(client: httpx.Client, chat_id: int, user_id: int) -> httpx.Response:
+    return client.post(
+        telegram_api_url("getChatMember"),
+        json={
+            "chat_id": chat_id,
+            "user_id": user_id,
+        },
+    )
+
+
 def copy_message(
     client: httpx.Client,
     chat_id: int,

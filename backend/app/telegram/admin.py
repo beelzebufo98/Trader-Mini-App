@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.funnel_session import FunnelSession
+from app.models.signal_channel import TelegramSignalChannel
 from app.models.telegram_user import TelegramUser as TelegramUserModel
 from app.models.trading import TradingSession
 from app.services.devsbite import DevsbiteApiError, DevsbiteConfigError, DevsbiteRequestError
@@ -31,7 +32,16 @@ from app.services.trading_mvp import (
     preview_mvp_trading_signal,
 )
 from app.services.signal_time import format_signal_time
-from app.telegram.client import answer_callback_query, copy_message, edit_message_text, send_message, set_chat_menu_button
+from app.telegram.client import (
+    answer_callback_query,
+    copy_message,
+    edit_message_text,
+    get_chat,
+    get_chat_member,
+    get_me,
+    send_message,
+    set_chat_menu_button,
+)
 
 ADMIN_SIGNAL_PREVIEWS: dict[str, dict[str, Any]] = {}
 MVP_PAYOUT_THRESHOLD_OPTIONS = (70, 75, 80, 85, 90)
@@ -135,6 +145,126 @@ def reset_funnel_menu_button(client: httpx.Client, telegram_id: int) -> bool:
         return False
 
 
+def parse_signal_channel_id(command_body: str) -> int | None:
+    channel_id_text = command_body.strip().split(maxsplit=1)[0] if command_body.strip() else ""
+    if not channel_id_text.startswith("-100") or not channel_id_text[1:].isdigit():
+        return None
+    return int(channel_id_text)
+
+
+def telegram_result(response: httpx.Response) -> dict[str, Any]:
+    response.raise_for_status()
+    payload = response.json()
+    if not payload.get("ok"):
+        description = str(payload.get("description") or "Telegram API error")
+        raise ValueError(description)
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        raise ValueError("Telegram API returned empty result")
+    return result
+
+
+def verify_signal_channel_access(client: httpx.Client, channel_id: int) -> dict[str, Any]:
+    bot = telegram_result(get_me(client))
+    bot_id = bot.get("id")
+    if not isinstance(bot_id, int):
+        raise ValueError("Не удалось определить ID бота через getMe")
+
+    chat = telegram_result(get_chat(client, channel_id))
+    chat_type = str(chat.get("type") or "")
+    if chat_type != "channel":
+        raise ValueError(f"Укажи ID Telegram-канала. Сейчас найден тип: {chat_type or 'unknown'}")
+
+    member = telegram_result(get_chat_member(client, channel_id, bot_id))
+    status = str(member.get("status") or "")
+    if status not in {"administrator", "creator"}:
+        raise ValueError("Бот должен быть администратором этого канала")
+
+    can_post_messages = member.get("can_post_messages")
+    if status == "administrator" and can_post_messages is not True:
+        raise ValueError("У бота нет права публиковать сообщения в этом канале")
+
+    return chat
+
+
+def handle_channel_add(client: httpx.Client, chat_id: int, db: Session, command_body: str, admin_telegram_id: int | None) -> None:
+    channel_id = parse_signal_channel_id(command_body)
+    if channel_id is None:
+        send_admin_message(client, chat_id, "Укажи numeric channel ID: <code>/channel_add -1004370080707</code>")
+        return
+
+    try:
+        channel = verify_signal_channel_access(client, channel_id)
+    except Exception as error:
+        send_admin_message(
+            client,
+            chat_id,
+            (
+                "Не удалось добавить канал.\n"
+                f"Channel ID: <code>{channel_id}</code>\n"
+                f"Причина: <code>{escape(str(error))}</code>\n\n"
+                "Проверь, что бот добавлен в канал админом и может публиковать сообщения."
+            ),
+        )
+        return
+
+    title = str(channel.get("title") or channel.get("username") or channel_id)
+    username = channel.get("username")
+    existing = db.query(TelegramSignalChannel).filter(TelegramSignalChannel.chat_id == channel_id).first()
+    if existing is None:
+        db.add(
+            TelegramSignalChannel(
+                chat_id=channel_id,
+                title=title[:255],
+                username=str(username)[:255] if username else None,
+                is_active=True,
+                created_by_telegram_id=admin_telegram_id,
+            )
+        )
+    else:
+        existing.title = title[:255]
+        existing.username = str(username)[:255] if username else None
+        existing.is_active = True
+        if existing.created_by_telegram_id is None:
+            existing.created_by_telegram_id = admin_telegram_id
+
+    db.commit()
+    send_admin_message(
+        client,
+        chat_id,
+        (
+            "Канал добавлен и проверен.\n"
+            f"Title: <b>{escape(title)}</b>\n"
+            f"Channel ID: <code>{channel_id}</code>\n"
+            "Бот является админом и может публиковать сообщения."
+        ),
+    )
+
+
+def handle_channel_remove(client: httpx.Client, chat_id: int, db: Session, command_body: str) -> None:
+    channel_id = parse_signal_channel_id(command_body)
+    if channel_id is None:
+        send_admin_message(client, chat_id, "Укажи numeric channel ID: <code>/channel_remove -1004370080707</code>")
+        return
+
+    channel = db.query(TelegramSignalChannel).filter(TelegramSignalChannel.chat_id == channel_id).first()
+    if channel is None:
+        send_admin_message(client, chat_id, f"Канал не найден в базе: <code>{channel_id}</code>")
+        return
+
+    channel.is_active = False
+    db.commit()
+    send_admin_message(
+        client,
+        chat_id,
+        (
+            "Канал отключен.\n"
+            f"Title: <b>{escape(channel.title or str(channel_id))}</b>\n"
+            f"Channel ID: <code>{channel_id}</code>"
+        ),
+    )
+
+
 def format_admin_help(total_users: int, segment_counts: dict[str, int]) -> str:
     lines = [
         "<b>Админ-команды</b>",
@@ -147,6 +277,8 @@ def format_admin_help(total_users: int, segment_counts: dict[str, int]) -> str:
         "/broadcast_segment segment ответом на сообщение - скопировать сообщение по сегменту",
         "/broadcast_test текст - отправить тест только себе",
         "/funnel_reset TELEGRAM_ID - сбросить состояние воронки пользователя для повторного теста",
+        "/channel_add -100... - добавить сигнальный канал и проверить права бота",
+        "/channel_remove -100... - отключить сигнальный канал в базе",
         "",
         "<b>Торговые сессии MVP</b>",
         "/signal_mvp - открыть inline-мастер: рынок -> пороги payout/confidence -> пара -> экспирация -> предпросмотр Devsbite -> подтверждение",
@@ -1037,6 +1169,8 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
         and not text.startswith("/signal_cancel")
         and not text.startswith("/signal_stop")
         and not text.startswith("/funnel_reset")
+        and not text.startswith("/channel_add")
+        and not text.startswith("/channel_remove")
     ):
         return False
 
@@ -1123,6 +1257,20 @@ def handle_admin_command_message(db: Session, user: dict[str, Any], chat_id: int
                     f"Telegram ID: <code>{telegram_id}</code>"
                 ),
             )
+            return True
+
+        if command_name == "/channel_add":
+            handle_channel_add(
+                client,
+                chat_id,
+                db,
+                command_body,
+                admin_telegram_id=user.get("id") if isinstance(user.get("id"), int) else None,
+            )
+            return True
+
+        if command_name == "/channel_remove":
+            handle_channel_remove(client, chat_id, db, command_body)
             return True
 
         if command_name == "/broadcast_test":

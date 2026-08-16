@@ -8,6 +8,7 @@ from typing import Callable, TypeVar
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.models.signal_channel import TelegramSignalChannel
 from app.models.trading import TradingSession, TradingSignal, TradingSignalAttempt, TradingSignalJob
 from app.services.devsbite import (
     DevsbiteApiError,
@@ -314,7 +315,17 @@ def _tv_analysis_symbol(pair: MvpPairOption) -> str:
     return pair.symbol.replace(" OTC", "").replace("/", "").replace(" ", "").upper()
 
 
-def get_signals_channel_id() -> int:
+def get_signals_channel_id(db: Session | None = None) -> int:
+    if db is not None:
+        active_channel = (
+            db.query(TelegramSignalChannel)
+            .filter(TelegramSignalChannel.is_active.is_(True))
+            .order_by(TelegramSignalChannel.id.desc())
+            .first()
+        )
+        if active_channel is not None:
+            return int(active_channel.chat_id)
+
     value = settings.telegram_signals_channel_id.strip()
     if not value:
         raise TradingMvpConfigError("TELEGRAM_SIGNALS_CHANNEL_ID is not configured")
@@ -987,7 +998,7 @@ def create_mvp_trading_session(
         payout=payout,
     )
 
-    channel_id = get_signals_channel_id()
+    channel_id = get_signals_channel_id(db)
     cancel_open_channel_sessions(db, channel_id)
 
     trading_session = TradingSession(

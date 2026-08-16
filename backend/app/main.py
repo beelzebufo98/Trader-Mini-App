@@ -7,7 +7,7 @@ from app.api.pocket_option import router as pocket_option_router
 from app.api.telegram import router as telegram_router, start_funnel_reminder_worker
 from app.config import settings
 from app.database import Base, engine
-from app.models import funnel_session, telegram_user, trading, user_settings
+from app.models import funnel_session, signal_channel, telegram_user, trading, user_settings
 from app.services.trading_signal_worker import start_trading_signal_worker
 
 app = FastAPI(title="Trader Mini Backend")
