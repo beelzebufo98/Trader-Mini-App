@@ -646,6 +646,11 @@ def run_bot_reminder_stage(chat_id: int, telegram_id: int, token: str, language:
                     initial_media_message_id=delivery.media_message_id,
                 )
     except Exception as error:
+        if is_telegram_bot_blocked_error(error):
+            db.rollback()
+            cancel_bot_reminder_flow(db, {"id": telegram_id})
+            print(f"telegram_bot_reminder_cancelled_blocked telegram_id={telegram_id} kind={kind} stage={stage}")
+            return
         print(f"telegram_bot_reminder_failed telegram_id={telegram_id} kind={kind} stage={stage} detail={telegram_error_detail(error)}")
     finally:
         db.close()
@@ -881,6 +886,10 @@ def telegram_error_detail(error: Exception) -> str:
     if isinstance(error, HTTPException):
         return str(error.detail)
     return repr(error)
+
+
+def is_telegram_bot_blocked_error(error: Exception) -> bool:
+    return "forbidden: bot was blocked by the user" in telegram_error_detail(error).lower()
 
 
 def send_funnel_delivery_error(client: httpx.Client, chat_id: int, node_code: str, error: Exception) -> None:
