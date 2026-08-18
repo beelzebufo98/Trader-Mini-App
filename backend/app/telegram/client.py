@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from typing import Any
 
@@ -134,7 +135,7 @@ def send_photo(
     if parse_mode is not None:
         data["parse_mode"] = parse_mode
     if reply_markup is not None:
-        data["reply_markup"] = reply_markup
+        data["reply_markup"] = json.dumps(reply_markup, ensure_ascii=False)
 
     with photo_path.open("rb") as photo:
         return client.post(

@@ -1,5 +1,5 @@
 ﻿import re
-from html import escape
+from html import escape, unescape
 from datetime import datetime, timedelta
 import random
 import threading
@@ -163,6 +163,7 @@ REMINDER_DELAYS_BY_KIND = {
 }
 REMINDER_WORKER_POLL_SECONDS = 15
 REMINDER_WORKER_BATCH_SIZE = 20
+TELEGRAM_PHOTO_CAPTION_LIMIT = 1024
 _reminder_worker_lock = threading.Lock()
 _reminder_worker_started = False
 
@@ -171,6 +172,15 @@ _reminder_worker_started = False
 class FunnelDelivery:
     text_message_id: int | None = None
     media_message_id: int | None = None
+
+
+def telegram_caption_length(html_text: str) -> int:
+    text_without_tags = re.sub(r"<[^>]+>", "", html_text)
+    return len(unescape(text_without_tags))
+
+
+def can_send_as_photo_caption(html_text: str) -> bool:
+    return telegram_caption_length(html_text) <= TELEGRAM_PHOTO_CAPTION_LIMIT
 
 
 def upsert_telegram_user(db: Session, user: dict[str, Any]) -> TelegramUserModel | None:
@@ -828,16 +838,28 @@ def copy_funnel_node(
         .replace("{team_total_income}", str(random.randint(10000, 100000)))
         .replace("{paradox_income}", str(random.randint(5000, 15000)))
     )
+    reply_markup = reply_markup_override if reply_markup_override is not None else funnel_node_keyboard(node_code, language)
+
     photo_path = FUNNEL_NODE_PHOTOS.get(node_code)
     media_message_id: int | None = None
+    if photo_path is not None and photo_path.exists() and can_send_as_photo_caption(text):
+        response = send_photo(client, chat_id, photo_path, caption=text, parse_mode="HTML", reply_markup=reply_markup)
+        response.raise_for_status()
+        result = response.json().get("result") or {}
+        message_id = result.get("message_id")
+        text_message_id = message_id if isinstance(message_id, int) else None
+        print(
+            f"telegram_send_node node={node_code} chat_id={chat_id} "
+            f"message_id={text_message_id} media_message_id=None delivery=photo_caption"
+        )
+        return FunnelDelivery(text_message_id=text_message_id)
+
     if photo_path is not None and photo_path.exists():
         photo_response = send_photo(client, chat_id, photo_path)
         photo_response.raise_for_status()
         photo_result = photo_response.json().get("result") or {}
         photo_message_id = photo_result.get("message_id")
         media_message_id = photo_message_id if isinstance(photo_message_id, int) else None
-
-    reply_markup = reply_markup_override if reply_markup_override is not None else funnel_node_keyboard(node_code, language)
 
     response = send_message(client, chat_id, text, parse_mode="HTML", reply_markup=reply_markup)
     response.raise_for_status()
